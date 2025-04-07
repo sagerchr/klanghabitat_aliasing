@@ -10,28 +10,29 @@ Fs = 48000  # Sampling rate in Hz
 nyquist = Fs / 2
 duration = 0.01  # 10 ms total duration (for FFT accuracy)
 
-st.title("🔁 Signal Aliasing Demo")
+st.title("klanghabitat Signal Aliasing")
 st.markdown(f"<h3>Sampling Rate: {Fs / 1000:.0f} kHz &nbsp;&nbsp;|&nbsp;&nbsp; Nyquist Frequency: {nyquist / 1000:.0f} kHz</h3>", unsafe_allow_html=True)
 
 # UI controls
 waveform = st.selectbox("Waveform Type", ["Sine", "Square", "Triangle"])
-signal_khz = st.slider("Signal Frequency (kHz)", min_value=10.0, max_value=40.0, step=0.1, value=10.0)
+signal_khz = st.slider("Signal Frequency (kHz)", min_value=.1, max_value=50.0, step=0.1, value=10.0)
 signal_hz = signal_khz * 1000
+amplitude = st.slider("Amplitude", min_value=0.1, max_value=2.0, step=0.1, value=1.0)
+
 
 # Time vectors
 t_cont = np.linspace(0, duration, 100000)     # for smooth plot
 t_samp = np.arange(0, duration, 1.0 / Fs)     # for sampling
 
-# Generate original and sampled signals
 if waveform == "Sine":
-    signal_true = np.sin(2 * np.pi * signal_hz * t_cont)
-    samples = np.sin(2 * np.pi * signal_hz * t_samp)
+    signal_true = amplitude * np.sin(2 * np.pi * signal_hz * t_cont)
+    samples = amplitude * np.sin(2 * np.pi * signal_hz * t_samp)
 elif waveform == "Square":
-    signal_true = np.sign(np.sin(2 * np.pi * signal_hz * t_cont))
-    samples = np.sign(np.sin(2 * np.pi * signal_hz * t_samp))
+    signal_true = amplitude * np.sign(np.sin(2 * np.pi * signal_hz * t_cont))
+    samples = amplitude * np.sign(np.sin(2 * np.pi * signal_hz * t_samp))
 elif waveform == "Triangle":
-    signal_true = 2 * np.abs(2 * (t_cont * signal_hz % 1) - 1) - 1
-    samples = 2 * np.abs(2 * (t_samp * signal_hz % 1) - 1) - 1
+    signal_true = amplitude * (2 * np.abs(2 * (t_cont * signal_hz % 1) - 1) - 1)
+    samples = amplitude * (2 * np.abs(2 * (t_samp * signal_hz % 1) - 1) - 1)
 
 # Sinc reconstruction
 def sinc_reconstruct(samples, t_samp, t_recon):
@@ -62,12 +63,16 @@ fft_freqs = fft_freqs[:N // 2]
 # Plotting
 fig, axs = plt.subplots(3, 1, figsize=(10, 9), sharex=False)
 
+
+# Show exactly one waveform cycle, limited between 100 µs and 10 ms
+window = np.clip(1.0 / signal_hz*3, 1e-6 , 0.01)
+
 # Time Domain - Original Signal
 axs[0].plot(t_cont, signal_true, color='gray', alpha=0.5, label="Original Signal")
 axs[0].plot(t_samp, samples, 'ko', markersize=3, label="Sampled Points")
 axs[0].set_title(f"Original Signal | {signal_khz:.2f} kHz ({waveform})")
 axs[0].set_ylim(-1.2, 1.2)
-axs[0].set_xlim(0, 0.001)  # Show only 1 ms
+axs[0].set_xlim(0, window)  # Show only 1 ms
 axs[0].grid(True)
 
 # Time Domain - Reconstructed
@@ -75,7 +80,7 @@ axs[1].plot(t_cont, recon, color='green', label="Reconstructed Signal")
 axs[1].plot(t_samp, samples, 'ko', markersize=3)
 axs[1].set_title(f"Reconstructed Signal | Appears as {alias_freq / 1000:.2f} kHz")
 axs[1].set_ylim(-1.2, 1.2)
-axs[1].set_xlim(0, 0.001)
+axs[1].set_xlim(0, window)
 axs[1].set_xlabel("Time (s)")
 axs[1].grid(True)
 
