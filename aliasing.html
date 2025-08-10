@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Aliasing Demo — dBFS, Windowing</title>
+<style>
+  :root {
+    --bg: #0b1020;
+    --panel: #111827;
+    --card: #1f2937;
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+    --accent: #60a5fa;
+    --accent2: #a78bfa;
+    --warn: #fbbf24;
+    --nyq: #ef4444;
+    --grid: #334155;
+  }
+  html, body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+  .wrap { padding: 16px; }
+  h1 { margin: 0 0 6px; font-size: 24px; font-weight: 600; }
+  .sub { color: var(--muted); margin-bottom: 16px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+  .card { background: var(--card); border: 1px solid #1f2937; border-radius: 12px; padding: 10px; }
+  .card h2 { margin: 6px 6px 10px; font-size: 14px; font-weight: 600; color: var(--text); }
+  canvas { width: 100%; height: 220px; background: black; border-radius: 10px; display:block; }
+  .controls .row { margin-bottom: 14px; }
+  label { font-size: 12px; display:block; margin-bottom: 4px; color: var(--text); }
+  input[type=range] { width: 100%; }
+  select, input[type=range], input[type=checkbox] { background: var(--panel); color: var(--text); border: 1px solid #374151; padding: 6px; border-radius: 8px; }
+  select, input[type=range] { width: 100%; }
+  .inline { display:flex; align-items:center; gap:8px; }
+  .hint { font-size: 11px; color: var(--muted); }
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Aliasing Demo — Time, Reconstruction & Spectrum</h1>
+    <div class="sub" id="readout"></div>
+    <div class="grid">
+      <div class="left">
+        <div class="card">
+          <h2>Original (continuous) + sampled points</h2>
+          <canvas id="c1"></canvas>
+        </div>
+        <div class="card">
+          <h2>Reconstructed (ideal sinc) from sampled points</h2>
+          <canvas id="c2"></canvas>
+        </div>
+        <div class="card">
+          <h2>Magnitude Spectrum (log‑f, dBFS)</h2>
+          <canvas id="c3"></canvas>
+        </div>
+      </div>
+      <div class="card controls">
+        <h2>Controls</h2>
+        <div class="row">
+          <label for="wave">Waveform</label>
+          <select id="wave">
+            <option>Sine</option>
+            <option>Square</option>
+            <option>Triangle</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="freq">Frequency: <span id="freqLabel"></span> kHz</label>
+          <input id="freq" type="range" min="1000" max="40000" value="10000" step="1"/>
+          <div class="hint">Folded: <span id="foldedLabel"></span> kHz</div>
+        </div>
+        <div class="row">
+          <label for="fs">Sample rate</label>
+          <select id="fs">
+            <option value="22050">22.05 kHz</option>
+            <option value="32000">32 kHz</option>
+            <option value="44100">44.1 kHz</option>
+            <option value="48000" selected>48 kHz</option>
+            <option value="88200">88.2 kHz</option>
+            <option value="96000">96 kHz</option>
+            <option value="176400">176.4 kHz</option>
+            <option value="192000">192 kHz</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="amp">Amplitude: <span id="ampLabel">1.0</span></label>
+          <input id="amp" type="range" min="0.1" max="2.0" value="1.0" step="0.1"/>
+        </div>
+        <div class="row">
+          <label for="fft">FFT Size</label>
+          <select id="fft">
+            <option>4096</option>
+            <option>8192</option>
+            <option selected>16384</option>
+            <option>32768</option>
+          </select>
+        </div>
+        <div class="row inline">
+          <input id="hann" type="checkbox" checked />
+          <label for="hann" style="margin:0;">Hann window (dBFS‑correct)</label>
+        </div>
+        <div class="hint">Tip: push the tone above Nyquist to watch it mirror. Use Square/Triangle to provoke dense aliasing from higher harmonics.</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const els = {
+    c1: document.getElementById('c1'),
+    c2: document.getElementById('c2'),
+    c3: document.getElementById('c3'),
+    wave: document.getElementById('wave'),
+    freq: document.getElementById('freq'),
+    fs: document.getElementById('fs'),
+    amp: document.getElementById('amp'),
+    fft: document.getElementById('fft'),
+    readout: document.getElementById('readout'),
+    freqLabel: document.getElementById('freqLabel'),
+    foldedLabel: document.getElementById('foldedLabel'),
+    ampLabel: document.getElementById('ampLabel'),
+    hann: document.getElementById('hann'),
+  };
+
+  function triangleWave(t){
+    const frac = t - Math.floor(t);
+    return 2 * Math.abs(2 * frac - 1) - 1;
+  }
+
+  function genWave(t, f0, amp, wave){
+    const out = new Float64Array(t.length);
+    for (let i = 0; i < t.length; i++){
+      const phase = f0 * t[i];
+      let v = 0;
+      if (wave === 'Sine') v = Math.sin(2*Math.PI*phase);
+      else if (wave === 'Square') v = Math.sign(Math.sin(2*Math.PI*phase));
+      else v = triangleWave(phase);
+      out[i] = amp * v;
+    }
+    return out;
+  }
+
+  function aliasFundamental(f, fs){
+    return Math.abs(f - fs * Math.round(f / fs));
+  }
+
+  function hannWindow(N){
+    const w = new Float64Array(N);
+    for(let n=0;n<N;n++) w[n] = 0.5 * (1 - Math.cos(2*Math.PI*n/(N-1)));
+    return w;
+  }
+
+  // Minimal radix-2 FFT
+  function fft(real, imag){
+    const n = real.length;
+    if ((n & (n-1)) !== 0) throw new Error('FFT size must be power of 2');
+    let j=0;
+    for (let i=0;i<n;i++){
+      if (i<j){ [real[i],real[j]]=[real[j],real[i]]; [imag[i],imag[j]]=[imag[j],imag[i]]; }
+      let m = n>>>1;
+      while(m>=1 && j>=m){ j-=m; m>>>=1; }
+      j+=m;
+    }
+    for (let len=2; len<=n; len<<=1){
+      const half=len>>>1;
+      const theta=-2*Math.PI/len;
+      const wpr=Math.cos(theta), wpi=Math.sin(theta);
+      for (let i=0;i<n;i+=len){
+        let wr=1, wi=0;
+        for (let k=0;k<half;k++){
+          const j1=i+k, j2=j1+half;
+          const tr=wr*real[j2]-wi*imag[j2];
+          const ti=wr*imag[j2]+wi*real[j2];
+          real[j2]=real[j1]-tr; imag[j2]=imag[j1]-ti;
+          real[j1]+=tr; imag[j1]+=ti;
+          const wrn=wr*wpr-wi*wpi; wi=wr*wpi+wi*wpr; wr=wrn;
+        }
+      }
+    }
+  }
+
+  function dbfsSpectrum(x, fs, fftSize, useHann){
+    const N = Math.min(fftSize, 1 << Math.floor(Math.log2(x.length)));
+    let CG = 1.0;
+    let real = new Float64Array(N);
+    let imag = new Float64Array(N);
+    if (useHann){
+      const w = hannWindow(N);
+      CG = 0;
+      for (let i=0;i<N;i++){ real[i] = (x[i]||0) * w[i]; CG += w[i]; }
+      CG /= N; // coherent gain
+    } else {
+      for (let i=0;i<N;i++) real[i] = x[i]||0;
+    }
+    // imag already zero
+    fft(real, imag);
+    const half = N>>>1;
+    const mags = new Float64Array(half);
+    // one-sided scaling
+    const scale = 2.0 / (N * CG);
+    for (let k=0;k<half;k++) mags[k] = Math.hypot(real[k], imag[k]) * scale;
+    mags[0] *= 0.5; // DC fix
+
+    // dBFS relative to full-scale sine peak=1
+    const db = new Float64Array(half);
+    const eps = 1e-20;
+    for (let k=0;k<half;k++) db[k] = 20 * Math.log10(Math.max(mags[k], eps));
+
+    const freqs = new Float64Array(half);
+    for (let k=0;k<half;k++) freqs[k] = (k*fs)/N;
+    return { db, freqs };
+  }
+
+  function prepCanvas(canvas){
+    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+    const cssW = canvas.clientWidth || canvas.width;
+    const cssH = canvas.clientHeight || canvas.height;
+    if (canvas.width !== Math.floor(cssW * dpr) || canvas.height !== Math.floor(cssH * dpr)){
+      canvas.width = Math.floor(cssW * dpr);
+      canvas.height = Math.floor(cssH * dpr);
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx, W: cssW, H: cssH};
+  }
+
+  function drawTime(canvas, t, x, points){
+    const {ctx, W, H} = prepCanvas(canvas);
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = '#0b1020'; ctx.fillRect(0,0,W,H);
+
+    // midline
+    ctx.strokeStyle = '#334155'; ctx.globalAlpha=0.7;
+    ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke(); ctx.globalAlpha=1;
+
+    // curve
+    ctx.strokeStyle = '#60a5fa'; ctx.lineWidth=2; ctx.beginPath();
+    const xmin=t[0], xmax=t[t.length-1];
+    for (let i=0;i<t.length;i++){
+      const xPix = ((t[i]-xmin)/(xmax-xmin))*(W-1);
+      const yPix = H/2 - x[i]*(H*0.4);
+      if (i===0) ctx.moveTo(xPix,yPix); else ctx.lineTo(xPix,yPix);
+    }
+    ctx.stroke();
+
+    // points
+    if (points){
+      ctx.fillStyle = '#fbbf24';
+      const tS = points.tS, xS = points.xS;
+      for (let i=0;i<tS.length;i++){
+        const tt = tS[i]; if (tt<xmin || tt>xmax) continue;
+        const xPix=((tt-xmin)/(xmax-xmin))*(W-1);
+        const yPix=H/2 - xS[i]*(H*0.4);
+        ctx.beginPath(); ctx.arc(xPix,yPix,3,0,Math.PI*2); ctx.fill();
+      }
+    }
+  }
+
+  function drawSpectrum(canvas, db, freqs, fs, f0, aliasF){
+    const {ctx, W, H} = prepCanvas(canvas);
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#0b1020'; ctx.fillRect(0,0,W,H);
+
+    const fmin = Math.max(10, freqs[1] || 10);
+    const fmax = freqs.length ? freqs[freqs.length-1] : fs/2;
+
+    // grid
+    ctx.strokeStyle='#334155'; ctx.lineWidth=1; ctx.globalAlpha=0.6; ctx.beginPath();
+    const ticks=[-140,-120,-100,-80,-60,-40,-20,0];
+    for (const d of ticks){ const y = H - ((d + 140) / 140) * H; ctx.moveTo(0,y); ctx.lineTo(W,y); }
+    ctx.stroke(); ctx.globalAlpha=1;
+
+    const logX = (f)=>{
+      const a = Math.log10(Math.max(fmin,1));
+      const b = Math.log10(Math.max(fmax,fmin*10));
+      const t = (Math.log10(Math.max(f,fmin))-a)/(b-a);
+      return Math.min(W-1, Math.max(0, t*(W-1)));
+    };
+
+    // Nyquist
+    const nx = logX(fs/2);
+    ctx.setLineDash([6,6]); ctx.strokeStyle='#ef4444'; ctx.beginPath(); ctx.moveTo(nx,0); ctx.lineTo(nx,H); ctx.stroke(); ctx.setLineDash([]);
+
+    // Markers for f0 and alias
+    const x0 = logX(f0);
+    const xa = logX(aliasF);
+    ctx.setLineDash([2,4]); ctx.strokeStyle='#93c5fd'; ctx.beginPath(); ctx.moveTo(x0,0); ctx.lineTo(x0,H); ctx.stroke();
+    ctx.setLineDash([4,4]); ctx.strokeStyle='#f59e0b'; ctx.beginPath(); ctx.moveTo(xa,0); ctx.lineTo(xa,H); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // curve
+    ctx.strokeStyle='#a78bfa'; ctx.lineWidth=2; ctx.beginPath();
+    let started=false;
+    for (let i=1;i<freqs.length;i++){
+      const f=freqs[i]; if (f<fmin) continue;
+      const x=logX(f);
+      const y= H - ((db[i] + 140) / 140) * H;
+      if (!started){ ctx.moveTo(x,y); started=true; } else { ctx.lineTo(x,y); }
+    }
+    ctx.stroke();
+
+    // labels
+    ctx.fillStyle='#cbd5e1'; ctx.font='12px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.textAlign='left'; ctx.fillText(`${Math.round(fmin)} Hz`, 6, H-6);
+    ctx.textAlign='right'; ctx.fillText(`${(fs/2/1000).toFixed(1)} kHz (Nyquist)`, W-6, 14);
+  }
+
+  function analyzeSpectrum(xS, fs, fftSize, useHann){
+    const {db, freqs} = dbfsSpectrum(xS, fs, fftSize, useHann);
+    return {db, freqs};
+  }
+
+  function render(){
+    const fs = +els.fs.value;
+    const f0 = +els.freq.value;
+    const amp = +els.amp.value;
+    const wave = els.wave.value;
+    const fftN = +els.fft.value;
+    const useHann = !!els.hann.checked;
+    const nyq = fs/2;
+
+    els.freqLabel.textContent = (f0/1000).toFixed(3);
+    els.ampLabel.textContent = amp.toFixed(1);
+    const folded = aliasFundamental(f0, fs)/1000;
+    els.foldedLabel.textContent = folded.toFixed(3);
+    els.readout.textContent = `Fs: ${(fs/1000).toFixed(1)} kHz · Nyquist: ${(nyq/1000).toFixed(1)} kHz · Fundamental folds to ${folded.toFixed(3)} kHz (dBFS, Hann=${useHann})`;
+
+    const duration = 0.02; // a bit longer to improve FFT resolution
+    const nSamp = Math.floor(duration*fs);
+    const tSamp = new Float64Array(nSamp);
+    for (let n=0;n<nSamp;n++) tSamp[n]=n/fs;
+    const xSamp = genWave(tSamp, f0, amp, wave);
+
+    const cycles = 3;
+    const window = Math.max(1e-6, Math.min(duration, cycles/Math.max(f0,1e-9)));
+    const viewCount = 1600;
+    const tView = new Float64Array(viewCount);
+    for (let i=0;i<viewCount;i++) tView[i] = i*(window/(viewCount-1));
+    const xCont = genWave(tView, f0, amp, wave);
+
+    // Reconstruction neighborhood
+    const T = 1/fs;
+    const left = -5*T, right = window+5*T;
+    const i0 = Math.max(0, Math.floor((left)*fs));
+    const i1 = Math.min(tSamp.length, Math.ceil((right)*fs));
+    const tPart = tSamp.subarray(i0, i1);
+    const xPart = xSamp.subarray(i0, i1);
+    const xRecon = (function sincRecon(samples, tS, tR){
+      const T = tS[1] - tS[0];
+      const y = new Float64Array(tR.length);
+      for (let i = 0; i < tS.length; i++){
+        const si = samples[i];
+        for (let j = 0; j < tR.length; j++){
+          const u = (tR[j] - tS[i]) / T;
+          y[j] += si * (u === 0 ? 1 : Math.sin(Math.PI*u)/(Math.PI*u));
+        }
+      }
+      return y;
+    })(xPart, tPart, tView);
+
+    // Draw time plots
+    drawTime(els.c1, tView, xCont, {tS:tSamp, xS:xSamp});
+    drawTime(els.c2, tView, xRecon, {tS:tSamp, xS:xSamp});
+
+    // Spectrum (dBFS)
+    const {db, freqs} = analyzeSpectrum(xSamp, fs, fftN, useHann);
+    const aliasF = aliasFundamental(f0, fs);
+    drawSpectrum(els.c3, db, freqs, fs, f0, aliasF);
+  }
+
+  // Hook inputs
+  ['input','change'].forEach(evt => {
+    [els.wave, els.freq, els.fs, els.amp, els.fft, els.hann].forEach(el => el.addEventListener(evt, render));
+  });
+  window.addEventListener('resize', render);
+
+  render();
+})();</script>
+</body>
+</html>
