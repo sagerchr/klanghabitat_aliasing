@@ -220,10 +220,21 @@
     return {ctx, W: cssW, H: cssH};
   }
 
-  function drawTime(canvas, t, x, points){
+  function drawTime(canvas, t, x, points, opts={}) {
     const {ctx, W, H} = prepCanvas(canvas);
+    const { autoscale=false, headroom=1.1 } = opts;
+
     ctx.clearRect(0,0,W,H);
     ctx.fillStyle = '#0b1020'; ctx.fillRect(0,0,W,H);
+
+    // peak detection for autoscale
+    let peak = 1.0;
+    if (autoscale) {
+      peak = 1e-9;
+      for (let i=0;i<x.length;i++){ const a=Math.abs(x[i]); if (a>peak) peak=a; }
+      peak *= headroom;              // a bit of headroom
+    }
+    const yScale = (H*0.45) / peak;  // 0.45 keeps some top/bottom margin
 
     // midline
     ctx.strokeStyle = '#334155'; ctx.globalAlpha=0.7;
@@ -234,7 +245,7 @@
     const xmin=t[0], xmax=t[t.length-1];
     for (let i=0;i<t.length;i++){
       const xPix = ((t[i]-xmin)/(xmax-xmin))*(W-1);
-      const yPix = H/2 - x[i]*(H*0.4);
+      const yPix = H/2 - x[i]*yScale;
       if (i===0) ctx.moveTo(xPix,yPix); else ctx.lineTo(xPix,yPix);
     }
     ctx.stroke();
@@ -246,7 +257,7 @@
       for (let i=0;i<tS.length;i++){
         const tt = tS[i]; if (tt<xmin || tt>xmax) continue;
         const xPix=((tt-xmin)/(xmax-xmin))*(W-1);
-        const yPix=H/2 - xS[i]*(H*0.4);
+        const yPix=H/2 - xS[i]*yScale;
         ctx.beginPath(); ctx.arc(xPix,yPix,3,0,Math.PI*2); ctx.fill();
       }
     }
@@ -355,7 +366,7 @@
 
     // Draw time plots
     drawTime(els.c1, tView, xCont, {tS:tSamp, xS:xSamp});
-    drawTime(els.c2, tView, xRecon, {tS:tSamp, xS:xSamp});
+    drawTime(els.c2, tView, xRecon, {tS:tSamp, xS:xSamp}, { autoscale: true });
 
     // Spectrum (dBFS)
     const {db, freqs} = analyzeSpectrum(xSamp, fs, fftN, useHann);
