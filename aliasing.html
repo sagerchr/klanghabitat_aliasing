@@ -22,7 +22,7 @@
   h1 { margin: 0 0 6px; font-size: 24px; font-weight: 600; }
   .sub { color: var(--muted); margin-bottom: 16px; font-size: 14px; }
   .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
-  .card { background: var(--card); border: 1px solid #1f2937; border-radius: 12px; padding: 10px; }
+  .card { margin: 6px 6px 6px; background: var(--card); border: 1px solid #1f2937; border-radius: 12px; padding: 10px; }
   .card h2 { margin: 6px 6px 10px; font-size: 14px; font-weight: 600; color: var(--text); }
   canvas { width: 100%; height: 220px; background: black; border-radius: 10px; display:block; }
   .controls .row { margin-bottom: 14px; }
@@ -39,7 +39,7 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Aliasing Demo — Time, Reconstruction & Spectrum</h1>
+    <h1>klanghabitat Aliasing Demo</h1>
     <div class="sub" id="readout"></div>
     <div class="grid">
       <div class="left">
@@ -327,8 +327,8 @@
     els.foldedLabel.textContent = folded.toFixed(3);
     els.readout.textContent = `Fs: ${(fs/1000).toFixed(1)} kHz · Nyquist: ${(nyq/1000).toFixed(1)} kHz · Fundamental folds to ${folded.toFixed(3)} kHz (dBFS, Hann=${useHann})`;
 
-    const duration = 0.02; // a bit longer to improve FFT resolution
-    const nSamp = Math.floor(duration*fs);
+	const nSamp = fftN;
+	const duration = nSamp / fs;
     const tSamp = new Float64Array(nSamp);
     for (let n=0;n<nSamp;n++) tSamp[n]=n/fs;
     const xSamp = genWave(tSamp, f0, amp, wave);
