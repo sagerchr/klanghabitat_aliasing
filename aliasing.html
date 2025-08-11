@@ -85,10 +85,6 @@
           </select>
         </div>
         <div class="row">
-          <label for="amp">Amplitude: <span id="ampLabel">1.0</span></label>
-          <input id="amp" type="range" min="0.1" max="2.0" value="1.0" step="0.1"/>
-        </div>
-        <div class="row">
           <label for="fft">FFT Size</label>
           <select id="fft">
             <option>4096</option>
@@ -115,12 +111,10 @@
     wave: document.getElementById('wave'),
     freq: document.getElementById('freq'),
     fs: document.getElementById('fs'),
-    amp: document.getElementById('amp'),
     fft: document.getElementById('fft'),
     readout: document.getElementById('readout'),
     freqLabel: document.getElementById('freqLabel'),
     foldedLabel: document.getElementById('foldedLabel'),
-    ampLabel: document.getElementById('ampLabel'),
     hann: document.getElementById('hann'),
   };
 
@@ -315,14 +309,13 @@
   function render(){
     const fs = +els.fs.value;
     const f0 = +els.freq.value;
-    const amp = +els.amp.value;
     const wave = els.wave.value;
     const fftN = +els.fft.value;
     const useHann = !!els.hann.checked;
     const nyq = fs/2;
-
+    const amp = 1.0; // fixed amplitude
+    
     els.freqLabel.textContent = (f0/1000).toFixed(3);
-    els.ampLabel.textContent = amp.toFixed(1);
     const folded = aliasFundamental(f0, fs)/1000;
     els.foldedLabel.textContent = folded.toFixed(3);
     els.readout.textContent = `Fs: ${(fs/1000).toFixed(1)} kHz · Nyquist: ${(nyq/1000).toFixed(1)} kHz · Fundamental folds to ${folded.toFixed(3)} kHz (dBFS, Hann=${useHann})`;
@@ -372,7 +365,7 @@
 
   // Hook inputs
   ['input','change'].forEach(evt => {
-    [els.wave, els.freq, els.fs, els.amp, els.fft, els.hann].forEach(el => el.addEventListener(evt, render));
+    [els.wave, els.freq, els.fs, els.fft, els.hann].forEach(el => el.addEventListener(evt, render));
   });
   window.addEventListener('resize', render);
 
