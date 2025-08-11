@@ -161,9 +161,9 @@
           </select>
         </div>
         <div class="row">
-          <label for="freq">Frequency: <span id="freqLabel"></span></label>
-          <input id="freq" type="range" min="50" max="40000" value="10000" step="1"/>
-          <div class="hint">Folded: <span id="foldedLabel"></span></div>
+            <input id="freq" type="range" min="0" max="1" value="0.5" step="0.001" />
+            <label for="freq">Frequency: <span id="freqLabel"></span></label>
+            <div class="hint">Folded: <span id="foldedLabel"></span></div>
         </div>
         <div class="row">
           <label for="fs">Sample rate</label>
@@ -212,6 +212,9 @@
     hann: document.getElementById('hann'),
   };
 
+  const FREQ_MIN = 20;      // lowest selectable frequency
+  const FREQ_MAX = 80000;   // highest selectable frequency
+  
   function triangleWave(t){
     const frac = t - Math.floor(t);
     return 2 * Math.abs(2 * frac - 1) - 1;
@@ -453,39 +456,48 @@
     const {db, freqs} = dbfsSpectrum(xS, fs, fftSize, useHann);
     return {db, freqs};
   }
-
   function render(){
+    // 0..1 slider → log Hz
+    const sliderVal = parseFloat(els.freq.value);
+    const f0 = FREQ_MIN * Math.pow(FREQ_MAX / FREQ_MIN, sliderVal);
+
     const fs = +els.fs.value;
-    const f0 = +els.freq.value;
     const wave = els.wave.value;
     const fftN = +els.fft.value;
     const useHann = !!els.hann.checked;
-    const nyq = fs/2;
-    const amp = 1.0; // fixed amplitude
-    
-    els.freqLabel.textContent   = fmtHz(f0);
-    const folded = aliasFundamental(f0, fs)/1000;
-    els.foldedLabel.textContent = fmtHz(aliasFundamental(f0, fs));
-    els.readout.textContent = `Fs: ${(fs/1000).toFixed(1)} kHz · Nyquist: ${(nyq/1000).toFixed(1)} kHz · Fundamental folds to ${folded.toFixed(3)} kHz (dBFS, Hann=${useHann})`;
+    const nyq = fs / 2;
+    const amp = 1.0;
 
-	const nSamp = fftN;
-	const duration = nSamp / fs;
+    // Labels
+    els.freqLabel.textContent = fmtHz(f0);
+    const foldedHz = aliasFundamental(f0, fs);
+    els.foldedLabel.textContent = fmtHz(foldedHz);
+    els.readout.textContent =
+      `Fs: ${(fs/1000).toFixed(1)} kHz · Nyquist: ${(nyq/1000).toFixed(1)} kHz · ` +
+      `Fundamental folds to ${(foldedHz/1000).toFixed(3)} kHz (dBFS, Hann=${useHann})`;
+
+    // FFT block length drives duration
+    const nSamp = fftN;
+    const duration = nSamp / fs;
+
+    // Sampled signal
     const tSamp = new Float64Array(nSamp);
-    for (let n=0;n<nSamp;n++) tSamp[n]=n/fs;
+    for (let n = 0; n < nSamp; n++) tSamp[n] = n / fs;
     const xSamp = genWave(tSamp, f0, amp, wave);
 
+    // Continuous view window
     const cycles = 3;
-    const window = Math.max(1e-6, Math.min(duration, cycles/Math.max(f0,1e-9)));
+    const window = Math.max(1e-6, Math.min(duration, cycles / Math.max(f0, 1e-9)));
     const viewCount = 1600;
     const tView = new Float64Array(viewCount);
-    for (let i=0;i<viewCount;i++) tView[i] = i*(window/(viewCount-1));
+    for (let i = 0; i < viewCount; i++) tView[i] = i * (window / (viewCount - 1));
     const xCont = genWave(tView, f0, amp, wave);
 
-    // Reconstruction neighborhood
-    const T = 1/fs;
-    const left = -5*T, right = window+5*T;
-    const i0 = Math.max(0, Math.floor((left)*fs));
-    const i1 = Math.min(tSamp.length, Math.ceil((right)*fs));
+    // Sinc reconstruction around the view
+    const T = 1 / fs;
+    const left = -5 * T, right = window + 5 * T;
+    const i0 = Math.max(0, Math.floor(left * fs));
+    const i1 = Math.min(tSamp.length, Math.ceil(right * fs));
     const tPart = tSamp.subarray(i0, i1);
     const xPart = xSamp.subarray(i0, i1);
     const xRecon = (function sincRecon(samples, tS, tR){
@@ -501,15 +513,15 @@
       return y;
     })(xPart, tPart, tView);
 
-    // Draw time plots
-    drawTime(els.c1, tView, xCont, {tS:tSamp, xS:xSamp});
-    drawTime(els.c2, tView, xRecon, {tS:tSamp, xS:xSamp}, { autoscale: true });
+    // Draw
+    drawTime(els.c1, tView, xCont,  { tS: tSamp, xS: xSamp });
+    drawTime(els.c2, tView, xRecon, { tS: tSamp, xS: xSamp }, { autoscale: true });
 
-    // Spectrum (dBFS)
-    const {db, freqs} = analyzeSpectrum(xSamp, fs, fftN, useHann);
+    const { db, freqs } = analyzeSpectrum(xSamp, fs, fftN, useHann);
     const aliasF = aliasFundamental(f0, fs);
     drawSpectrum(els.c3, db, freqs, fs, f0, aliasF);
   }
+
 
   // Hook inputs
   ['input','change'].forEach(evt => {
