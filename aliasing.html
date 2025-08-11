@@ -177,20 +177,6 @@
             <option value="176400">176.4 kHz</option>
             <option value="192000">192 kHz</option>
           </select>
-        </div>
-        <div class="row">
-          <label for="fft">FFT Size</label>
-          <select id="fft">
-            <option>4096</option>
-            <option>8192</option>
-            <option selected>16384</option>
-            <option>32768</option>
-          </select>
-        </div>
-        <div class="row inline">
-          <input id="hann" type="checkbox" checked />
-          <label for="hann" style="margin:0;">Hann window (dBFS‑correct)</label>
-        </div>
         <div class="hint">Tip: push the tone above Nyquist to watch it mirror. Use Square/Triangle to provoke dense aliasing from higher harmonics.</div>
       </div>
     </div>
@@ -205,11 +191,9 @@
     wave: document.getElementById('wave'),
     freq: document.getElementById('freq'),
     fs: document.getElementById('fs'),
-    fft: document.getElementById('fft'),
     readout: document.getElementById('readout'),
     freqLabel: document.getElementById('freqLabel'),
     foldedLabel: document.getElementById('foldedLabel'),
-    hann: document.getElementById('hann'),
   };
 
   const FREQ_MIN = 20;      // lowest selectable frequency
@@ -463,8 +447,8 @@
 
     const fs = +els.fs.value;
     const wave = els.wave.value;
-    const fftN = +els.fft.value;
-    const useHann = !!els.hann.checked;
+    const fftN = 16384;
+    const useHann = true;
     const nyq = fs / 2;
     const amp = 1.0;
 
@@ -525,7 +509,7 @@
 
   // Hook inputs
   ['input','change'].forEach(evt => {
-    [els.wave, els.freq, els.fs, els.fft, els.hann].forEach(el => el.addEventListener(evt, render));
+      [els.wave, els.freq, els.fs].forEach(el => el.addEventListener(evt, render));
   });
   window.addEventListener('resize', render);
 
