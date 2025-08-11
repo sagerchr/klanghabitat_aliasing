@@ -205,6 +205,33 @@
                     : `${(v/1000).toFixed(v < 10000 ? 3 : 2)} kHz`;
   }
   
+  function genHarmonics(wave, f0, amp, fmax){
+    const stems = [];
+    if (f0 <= 0) return stems;
+
+    if (wave === 'Sine') {
+      if (f0 <= fmax) stems.push({ f: f0, a: amp });
+      return stems;
+    }
+
+    if (wave === 'Square') {
+      const norm = 4 / Math.PI;
+      for (let n = 1; ; n += 2) {
+        const f = n * f0; if (f > fmax) break;
+        stems.push({ f, a: amp * (norm * (1 / n)) });
+      }
+      return stems;
+    }
+
+    // Triangle: odd harmonics, amplitude ~ 1/n^2 (sign alternates, magnitude shown)
+    const norm = 8 / (Math.PI * Math.PI);
+    for (let n = 1; ; n += 2) {
+      const f = n * f0; if (f > fmax) break;
+      stems.push({ f, a: amp * (norm * (1 / (n * n))) });
+    }
+    return stems;
+  }
+  
   function genWave(t, f0, amp, wave){
     const out = new Float64Array(t.length);
     for (let i = 0; i < t.length; i++){
@@ -345,85 +372,223 @@
     }
   }
   const FMAX_VIEW = 200000; // 200 kHz fixed right edge
-  function drawSpectrum(canvas, db, freqs, fs, f0, aliasF){
+  // Central color palette
+  const COLORS = {
+    background:   '#0b1020',
+    grid:         '#334155',
+    labels:       '#cbd5e1',
+
+    nyquistLine:  '#ef4444',
+    nyquistText:  '#cbd5e1',
+
+    fundamentalMarker: '#93c5fd', // dashed marker at f0
+    aliasMarker:       '#f59e0b', // dashed marker at alias(f0)
+
+    fftCurve:     '#a78bfa',      // only if showFFT
+    stemBelow:    '#f59e0b',      // ideal harmonics ≤ Nyquist
+    stemAbove:    '#60a5fa',      // ideal harmonics > Nyquist
+    aliasStem:    '#1e3a8a'       // red reflections (folded to baseband)
+    
+  };
+  
+  function drawSpectrum(
+    canvas, db, freqs, fs, f0, aliasF, wave, amp,
+    opts={}
+  ){
+    const {
+      showFFT = false,        // draw measured FFT curve?
+      showViewLabel = true,   // draw the fixed-view caption
+      dbFloor = -60,         // bottom of dB axis
+      fmin = 10,              // left edge (Hz)
+      fmax = FMAX_VIEW        // right edge (Hz) — define FMAX_VIEW elsewhere
+    } = opts;
+
     const {ctx, W, H} = prepCanvas(canvas);
-    ctx.clearRect(0,0,W,H);
-    ctx.fillStyle='#0b1020'; ctx.fillRect(0,0,W,H);
 
-    const fmin = 10;                 // fixed left edge
-    const fmax = FMAX_VIEW;          // fixed right edge
-
-    // log scale mapping over fixed [fmin, fmax]
-    const a = Math.log10(fmin);
-    const b = Math.log10(fmax);
+    // ---- helpers ----
+    const a = Math.log10(fmin), b = Math.log10(fmax);
     const logX = (f)=>{
       const t = (Math.log10(Math.max(f, fmin)) - a) / (b - a);
       return Math.min(W-1, Math.max(0, t * (W-1)));
     };
+    const dbToY = (dB)=>{
+      const clamped = Math.max(dbFloor, Math.min(0, dB));
+      return H - ((clamped - dbFloor) / (0 - dbFloor)) * H;
+    };
 
-    // --- horizontal grid (dB)
-    ctx.strokeStyle='#334155'; ctx.lineWidth=1; ctx.globalAlpha=0.6;
+    // ---- background ----
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = COLORS.background;
+    ctx.fillRect(0,0,W,H);
+
+    // ---- grids ----
+    const dbTicks   = [-140,-120,-100,-80,-60,-40,-20,0];
+    const freqTicks = [10,20,30,40,50,60,70,80,90,
+                       100,200,300,400,500,600,800,900,
+                       1000,2000,3000,4000,5000,6000,7000,8000,9000,
+                       10000,20000,30000,40000,50000,600000,700000,80000,900000,100000,200000];
+    const majorFreqTicks = [100, 1000, 10000, 100000];
+    const majorSet = new Set(majorFreqTicks);
+    
+    // horizontal (dB)
+    ctx.strokeStyle = COLORS.grid; ctx.lineWidth = 1; ctx.globalAlpha = 0.6;
     ctx.beginPath();
-    const dbTicks=[-140,-120,-100,-80,-60,-40,-20,0];
-    for (const d of dbTicks){
-      const y = H - ((d + 140) / 140) * H;
-      ctx.moveTo(0,y); ctx.lineTo(W,y);
-    }
-    ctx.stroke(); ctx.globalAlpha=1;
+    for (const d of dbTicks){ const y = dbToY(d); ctx.moveTo(0,y); ctx.lineTo(W,y); }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
 
-    // --- vertical grid (log freq ticks up to 200 kHz)
-    const freqTicks = [100,1000,10000,100000];
-    ctx.strokeStyle='#334155';
+    // --- vertical grid (log-f) ---
+    // minor lines
+    ctx.save();
+    ctx.strokeStyle = COLORS.grid;
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 1;
     ctx.beginPath();
     for (const f of freqTicks){
-      if (f < fmin || f > fmax) continue;
+      if (f < fmin || f > fmax || majorSet.has(f)) continue;
       const x = logX(f);
-      ctx.moveTo(x,0); ctx.lineTo(x,H);
+      ctx.moveTo(x, 0); ctx.lineTo(x, H);
     }
     ctx.stroke();
+    ctx.restore();
 
-    // --- Nyquist (moves)
-    const nx = logX(fs/2);
-    ctx.setLineDash([6,6]); ctx.strokeStyle='#ef4444';
+    // major lines
+    ctx.save();
+    ctx.strokeStyle = COLORS.grid;
+    ctx.globalAlpha = 0.8;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (const f of majorFreqTicks){
+      if (f < fmin || f > fmax) continue;
+      const x = logX(f);
+      ctx.moveTo(x, 0); ctx.lineTo(x, H);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // --- X-axis labels (majors only) ---
+    ctx.fillStyle = COLORS.labels;
+    ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (const f of majorFreqTicks){
+      if (f < fmin || f > fmax) continue;
+      const x = logX(f);
+      const label = (f >= 1000) ? `${(f/1000).toFixed(0)} kHz` : `${f} Hz`;
+      ctx.fillText(label, x, H - 14);
+    }
+
+    // ---- Nyquist line ----
+    const nyq = fs/2;
+    const nx = logX(nyq);
+    ctx.setLineDash([6,6]);
+    ctx.strokeStyle = COLORS.nyquistLine;
     ctx.beginPath(); ctx.moveTo(nx,0); ctx.lineTo(nx,H); ctx.stroke();
     ctx.setLineDash([]);
 
-    // --- markers for f0 & alias (clip to view)
+    // ---- f0 & alias markers (dashed) ----
     const x0 = logX(Math.min(Math.max(f0, fmin), fmax));
     const xa = logX(Math.min(Math.max(aliasF, fmin), fmax));
-    ctx.setLineDash([2,4]); ctx.strokeStyle='#93c5fd';
+
+    ctx.setLineDash([2,4]);
+    ctx.strokeStyle = COLORS.fundamentalMarker;
     ctx.beginPath(); ctx.moveTo(x0,0); ctx.lineTo(x0,H); ctx.stroke();
-    ctx.setLineDash([4,4]); ctx.strokeStyle='#f59e0b';
+
+    ctx.setLineDash([4,4]);
+    ctx.strokeStyle = COLORS.aliasMarker;
     ctx.beginPath(); ctx.moveTo(xa,0); ctx.lineTo(xa,H); ctx.stroke();
     ctx.setLineDash([]);
 
-    // --- spectrum curve (your data only goes to fs/2; that’s fine)
-    ctx.strokeStyle='#a78bfa'; ctx.lineWidth=2;
-    ctx.beginPath();
-    let started=false;
-    for (let i=1;i<freqs.length;i++){
-      const f=freqs[i]; if (f<fmin || f>fmax) continue;
-      const x=logX(f);
-      const y= H - ((db[i] + 140) / 140) * H;
-      if (!started){ ctx.moveTo(x,y); started=true; } else { ctx.lineTo(x,y); }
+    // ---- optional measured FFT curve (to Nyquist) ----
+    if (showFFT){
+      ctx.strokeStyle = COLORS.fftCurve; ctx.lineWidth = 2;
+      ctx.beginPath();
+      let started = false;
+      for (let i=1;i<freqs.length;i++){
+        const f = freqs[i];
+        if (f < fmin || f > fmax) continue;
+        const x = logX(f);
+        const y = dbToY(db[i]);
+        if (!started){ ctx.moveTo(x,y); started = true; } else { ctx.lineTo(x,y); }
+      }
+      ctx.stroke();
     }
-    ctx.stroke();
 
-    // --- labels
-    ctx.fillStyle='#cbd5e1';
-    ctx.font='12px ui-monospace, SFMono-Regular, Menlo, monospace';
-    ctx.textAlign='center'; ctx.textBaseline='top';
-    for (const f of freqTicks){
+    // ---- ideal harmonic stems (beyond Nyquist), green/orange ----
+    function genHarmonicsLocal(wave, f0, amp, fmax){
+      const stems = [];
+      if (f0 <= 0) return stems;
+      if (wave === 'Sine'){
+        if (f0 <= fmax) stems.push({ f: f0, a: amp });
+        return stems;
+      }
+      if (wave === 'Square'){
+        const norm = 4 / Math.PI;
+        for (let n=1;;n+=2){
+          const f = n * f0; if (f > fmax) break;
+          stems.push({ f, a: amp * (norm * (1/n)) });
+        }
+        return stems;
+      }
+      // Triangle
+      const norm = 8 / (Math.PI * Math.PI);
+      for (let n=1;;n+=2){
+        const f = n * f0; if (f > fmax) break;
+        stems.push({ f, a: amp * (norm * (1/(n*n))) });
+      }
+      return stems;
+    }
+
+    const stems = genHarmonicsLocal(wave, f0, amp, fmax);
+
+    // originals
+    ctx.lineWidth = 1.5;
+    for (const {f, a: ampl} of stems){
       if (f < fmin || f > fmax) continue;
       const x = logX(f);
-      const label = f>=1000 ? `${(f/1000).toFixed(f<10000?1:0)} kHz` : `${f} Hz`;
-      ctx.fillText(label, x, H-14);
+      const y = dbToY(20 * Math.log10(Math.max(ampl, 1e-12)));
+      ctx.strokeStyle = (f <= nyq) ? COLORS.stemBelow : COLORS.stemAbove;
+      ctx.beginPath(); ctx.moveTo(x, H-1); ctx.lineTo(x, y); ctx.stroke();
     }
 
-    // Top-right corner: Nyquist label
-    ctx.textAlign = 'right';
+    // red reflections (aliases) at folded frequency
+    for (const {f, a: ampl} of stems){
+      if (f <= nyq) continue;
+      const fa = Math.abs(f - fs * Math.round(f / fs)); // your alias mapping
+      if (fa < fmin || fa > fmax) continue;
+      const xA = logX(fa);
+      const yA = dbToY(20 * Math.log10(Math.max(ampl, 1e-12)));
+      ctx.strokeStyle = COLORS.aliasStem;
+      ctx.beginPath(); ctx.moveTo(xA, H-1); ctx.lineTo(xA, yA); ctx.stroke();
+    }
+
+    // ---- labels ----
+    ctx.fillStyle = COLORS.labels;
+    ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
+
+    ctx.fillStyle = COLORS.labels;
+    ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(`${(fs/2/1000).toFixed(1)} kHz (Nyquist)`, W - 6, 6);
+    for (const f of majorFreqTicks){
+      if (f < fmin || f > fmax) continue;
+      const x = logX(f);
+      const label = (f >= 1000) ? `${(f/1000).toFixed(0)} kHz` : `${f} Hz`;
+      ctx.fillText(label, x, H - 14);
+    }
+
+
+    // dB labels (left)
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    for (const d of dbTicks){
+      // ctx.fillText(`${d}`, 4, dbToY(d));
+    }
+
+    // top-right labels
+    ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+    ctx.fillStyle = COLORS.nyquistText;
+    ctx.fillText(`${(nyq/1000).toFixed(1)} kHz (Nyquist)`, W - 6, 6);
+    //if (showViewLabel) ctx.fillText(`${(fmax/1000).toFixed(0)} kHz (view)`, W - 6, 20);
   }
   
   function analyzeSpectrum(xS, fs, fftSize, useHann){
@@ -493,7 +658,7 @@
 
     const { db, freqs } = analyzeSpectrum(xSamp, fs, fftN, useHann);
     const aliasF = aliasFundamental(f0, fs);
-    drawSpectrum(els.c3, db, freqs, fs, f0, aliasF);
+    drawSpectrum(els.c3, db, freqs, fs, f0, aliasF, wave, amp);
   }
 
 
