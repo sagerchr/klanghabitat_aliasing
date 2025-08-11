@@ -361,56 +361,94 @@
       }
     }
   }
-
+  const FMAX_VIEW = 200000; // 200 kHz fixed right edge
   function drawSpectrum(canvas, db, freqs, fs, f0, aliasF){
     const {ctx, W, H} = prepCanvas(canvas);
     ctx.clearRect(0,0,W,H);
     ctx.fillStyle='#0b1020'; ctx.fillRect(0,0,W,H);
 
-    const fmin = Math.max(10, freqs[1] || 10);
-    const fmax = freqs.length ? freqs[freqs.length-1] : fs/2;
+    const fmin = 10;                 // fixed left edge
+    const fmax = FMAX_VIEW;          // fixed right edge
 
-    // grid
-    ctx.strokeStyle='#334155'; ctx.lineWidth=1; ctx.globalAlpha=0.6; ctx.beginPath();
-    const ticks=[-140,-120,-100,-80,-60,-40,-20,0];
-    for (const d of ticks){ const y = H - ((d + 140) / 140) * H; ctx.moveTo(0,y); ctx.lineTo(W,y); }
-    ctx.stroke(); ctx.globalAlpha=1;
-
+    // log scale mapping over fixed [fmin, fmax]
+    const a = Math.log10(fmin);
+    const b = Math.log10(fmax);
     const logX = (f)=>{
-      const a = Math.log10(Math.max(fmin,1));
-      const b = Math.log10(Math.max(fmax,fmin*10));
-      const t = (Math.log10(Math.max(f,fmin))-a)/(b-a);
-      return Math.min(W-1, Math.max(0, t*(W-1)));
+      const t = (Math.log10(Math.max(f, fmin)) - a) / (b - a);
+      return Math.min(W-1, Math.max(0, t * (W-1)));
     };
 
-    // Nyquist
-    const nx = logX(fs/2);
-    ctx.setLineDash([6,6]); ctx.strokeStyle='#ef4444'; ctx.beginPath(); ctx.moveTo(nx,0); ctx.lineTo(nx,H); ctx.stroke(); ctx.setLineDash([]);
+    // --- horizontal grid (dB)
+    ctx.strokeStyle='#334155'; ctx.lineWidth=1; ctx.globalAlpha=0.6;
+    ctx.beginPath();
+    const dbTicks=[-140,-120,-100,-80,-60,-40,-20,0];
+    for (const d of dbTicks){
+      const y = H - ((d + 140) / 140) * H;
+      ctx.moveTo(0,y); ctx.lineTo(W,y);
+    }
+    ctx.stroke(); ctx.globalAlpha=1;
 
-    // Markers for f0 and alias
-    const x0 = logX(f0);
-    const xa = logX(aliasF);
-    ctx.setLineDash([2,4]); ctx.strokeStyle='#93c5fd'; ctx.beginPath(); ctx.moveTo(x0,0); ctx.lineTo(x0,H); ctx.stroke();
-    ctx.setLineDash([4,4]); ctx.strokeStyle='#f59e0b'; ctx.beginPath(); ctx.moveTo(xa,0); ctx.lineTo(xa,H); ctx.stroke();
+    // --- vertical grid (log freq ticks up to 200 kHz)
+    const freqTicks = [100,1000,10000,100000];
+    ctx.strokeStyle='#334155';
+    ctx.beginPath();
+    for (const f of freqTicks){
+      if (f < fmin || f > fmax) continue;
+      const x = logX(f);
+      ctx.moveTo(x,0); ctx.lineTo(x,H);
+    }
+    ctx.stroke();
+
+    // --- Nyquist (moves)
+    const nx = logX(fs/2);
+    ctx.setLineDash([6,6]); ctx.strokeStyle='#ef4444';
+    ctx.beginPath(); ctx.moveTo(nx,0); ctx.lineTo(nx,H); ctx.stroke();
     ctx.setLineDash([]);
 
-    // curve
-    ctx.strokeStyle='#a78bfa'; ctx.lineWidth=2; ctx.beginPath();
+    // --- markers for f0 & alias (clip to view)
+    const x0 = logX(Math.min(Math.max(f0, fmin), fmax));
+    const xa = logX(Math.min(Math.max(aliasF, fmin), fmax));
+    ctx.setLineDash([2,4]); ctx.strokeStyle='#93c5fd';
+    ctx.beginPath(); ctx.moveTo(x0,0); ctx.lineTo(x0,H); ctx.stroke();
+    ctx.setLineDash([4,4]); ctx.strokeStyle='#f59e0b';
+    ctx.beginPath(); ctx.moveTo(xa,0); ctx.lineTo(xa,H); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // --- spectrum curve (your data only goes to fs/2; that’s fine)
+    ctx.strokeStyle='#a78bfa'; ctx.lineWidth=2;
+    ctx.beginPath();
     let started=false;
     for (let i=1;i<freqs.length;i++){
-      const f=freqs[i]; if (f<fmin) continue;
+      const f=freqs[i]; if (f<fmin || f>fmax) continue;
       const x=logX(f);
       const y= H - ((db[i] + 140) / 140) * H;
       if (!started){ ctx.moveTo(x,y); started=true; } else { ctx.lineTo(x,y); }
     }
     ctx.stroke();
 
-    // labels
-    ctx.fillStyle='#cbd5e1'; ctx.font='12px ui-monospace, SFMono-Regular, Menlo, monospace';
-    ctx.textAlign='left'; ctx.fillText(`${Math.round(fmin)} Hz`, 6, H-6);
-    ctx.textAlign='right'; ctx.fillText(`${(fs/2/1000).toFixed(1)} kHz (Nyquist)`, W-6, 14);
-  }
+    // --- labels
+    ctx.fillStyle='#cbd5e1';
+    ctx.font='12px ui-monospace, SFMono-Regular, Menlo, monospace';
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    for (const f of freqTicks){
+      if (f < fmin || f > fmax) continue;
+      const x = logX(f);
+      const label = f>=1000 ? `${(f/1000).toFixed(f<10000?1:0)} kHz` : `${f} Hz`;
+      ctx.fillText(label, x, H-14);
+    }
+    // dB labels (left)
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    for (const d of dbTicks){
+      const y = H - ((d + 140) / 140) * H;
+      ctx.fillText(`${d}`, 4, y);
+    }
 
+    // Top-right corner: Nyquist label
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`${(fs/2/1000).toFixed(1)} kHz (Nyquist)`, W - 6, 6);
+  }
+  
   function analyzeSpectrum(xS, fs, fftSize, useHann){
     const {db, freqs} = dbfsSpectrum(xS, fs, fftSize, useHann);
     return {db, freqs};
