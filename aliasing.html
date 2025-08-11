@@ -59,12 +59,6 @@
     select:hover {
       background-color: #1e2533;
     }
-
-    select:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.3);
-    }
     /* Range: reset native styles so we control height */
     input[type=range] {
       -webkit-appearance: none;
@@ -146,7 +140,7 @@
           <canvas id="c2"></canvas>
         </div>
         <div class="card">
-          <h2>Magnitude Spectrum (log‑f, dBFS)</h2>
+          <h2>Magnitude Spectrum</h2>
           <canvas id="c3"></canvas>
         </div>
       </div>
@@ -177,6 +171,8 @@
             <option value="176400">176.4 kHz</option>
             <option value="192000">192 kHz</option>
           </select>
+        </div>
+          <div class="row">
         <div class="hint">Tip: push the tone above Nyquist to watch it mirror. Use Square/Triangle to provoke dense aliasing from higher harmonics.</div>
       </div>
     </div>
@@ -422,12 +418,6 @@
       const x = logX(f);
       const label = f>=1000 ? `${(f/1000).toFixed(f<10000?1:0)} kHz` : `${f} Hz`;
       ctx.fillText(label, x, H-14);
-    }
-    // dB labels (left)
-    ctx.textAlign='left'; ctx.textBaseline='middle';
-    for (const d of dbTicks){
-      const y = H - ((d + 140) / 140) * H;
-      ctx.fillText(`${d}`, 4, y);
     }
 
     // Top-right corner: Nyquist label
