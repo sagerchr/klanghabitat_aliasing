@@ -177,9 +177,8 @@
       </div>
     </div>
   </div>
-
 <script>
-(function(){
+(function () {
   const els = {
     c1: document.getElementById('c1'),
     c2: document.getElementById('c2'),
@@ -192,20 +191,124 @@
     foldedLabel: document.getElementById('foldedLabel'),
   };
 
-  const FREQ_MIN = 20;      // lowest selectable frequency
-  const FREQ_MAX = 80000;   // highest selectable frequency
-  
-  function triangleWave(t){
+  // ======= Config =======
+  const FREQ_MIN = 20;       // slider low end (Hz)
+  const FREQ_MAX = 80000;    // slider high end (Hz)
+  const FMAX_VIEW = 200000;  // spectrum right edge (Hz)
+  const CURVE_COLOR = '#1e3a8a'; // dark blue for time-domain curves
+
+  // Central palette for spectrum
+  const COLORS = {
+    background:   '#0b1020',
+    grid:         '#334155',
+    labels:       '#cbd5e1',
+
+    nyquistLine:  '#ef4444',
+    nyquistText:  '#cbd5e1',
+
+
+    fundamentalMarker: '#93c5fd', // dashed marker at f0
+    aliasMarker:       '#f59e0b', // dashed marker at alias(f0)
+
+
+
+    fftCurve:     '#a78bfa',      // only if showFFT
+    stemBelow:    '#f59e0b',      // ideal harmonics ≤ Nyquist
+    stemAbove:    '#60a5fa',      // ideal harmonics > Nyquist
+    aliasStem:    '#1e3a8a'       // red reflections (folded to baseband)
+  };
+  // ======= Helpers =======
+  function triangleWave(t) {
     const frac = t - Math.floor(t);
     return 2 * Math.abs(2 * frac - 1) - 1;
   }
-  
-  function fmtHz(v){
+
+  function fmtHz(v) {
     return v < 1000 ? `${Math.round(v)} Hz`
-                    : `${(v/1000).toFixed(v < 10000 ? 3 : 2)} kHz`;
+                    : `${(v / 1000).toFixed(v < 10000 ? 3 : 2)} kHz`;
   }
-  
-  function genHarmonics(wave, f0, amp, fmax){
+
+  function genWave(t, f0, amp, wave) {
+    const out = new Float64Array(t.length);
+    for (let i = 0; i < t.length; i++) {
+      const phase = f0 * t[i];
+      let v = 0;
+      if (wave === 'Sine') v = Math.sin(2 * Math.PI * phase);
+      else if (wave === 'Square') v = Math.sign(Math.sin(2 * Math.PI * phase));
+      else v = triangleWave(phase);
+      out[i] = amp * v;
+    }
+    return out;
+  }
+
+  function aliasFundamental(f, fs) {
+    return Math.abs(f - fs * Math.round(f / fs));
+  }
+
+  function prepCanvas(canvas) {
+    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+    const cssW = canvas.clientWidth || canvas.width;
+    const cssH = canvas.clientHeight || canvas.height;
+    if (canvas.width !== Math.floor(cssW * dpr) || canvas.height !== Math.floor(cssH * dpr)) {
+      canvas.width = Math.floor(cssW * dpr);
+      canvas.height = Math.floor(cssH * dpr);
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, W: cssW, H: cssH };
+  }
+
+  function drawTime(canvas, t, x, points, opts = {}) {
+    const { ctx, W, H } = prepCanvas(canvas);
+    const { autoscale = false, headroom = 1.1 } = opts;
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = COLORS.background;
+    ctx.fillRect(0, 0, W, H);
+
+    let peak = 1.0;
+    if (autoscale) {
+      peak = 1e-9;
+      for (let i = 0; i < x.length; i++) {
+        const a = Math.abs(x[i]);
+        if (a > peak) peak = a;
+      }
+      peak *= headroom;
+    }
+    const yScale = (H * 0.45) / peak;
+
+    // midline
+    ctx.strokeStyle = COLORS.grid;
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // curve
+    ctx.strokeStyle = CURVE_COLOR;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const xmin = t[0], xmax = t[t.length - 1];
+    for (let i = 0; i < t.length; i++) {
+      const xPix = ((t[i] - xmin) / (xmax - xmin)) * (W - 1);
+      const yPix = H / 2 - x[i] * yScale;
+      if (i === 0) ctx.moveTo(xPix, yPix); else ctx.lineTo(xPix, yPix);
+    }
+    ctx.stroke();
+
+    // points (sample dots)
+    if (points) {
+      ctx.fillStyle = '#fbbf24';
+      const tS = points.tS, xS = points.xS;
+      for (let i = 0; i < tS.length; i++) {
+        const tt = tS[i]; if (tt < xmin || tt > xmax) continue;
+        const xPix = ((tt - xmin) / (xmax - xmin)) * (W - 1);
+        const yPix = H / 2 - xS[i] * yScale;
+        ctx.beginPath(); ctx.arc(xPix, yPix, 3, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  function genHarmonics(wave, f0, amp, fmax) {
     const stems = [];
     if (f0 <= 0) return stems;
 
@@ -223,7 +326,7 @@
       return stems;
     }
 
-    // Triangle: odd harmonics, amplitude ~ 1/n^2 (sign alternates, magnitude shown)
+    // Triangle: odd harmonics, amplitude ~ 1/n^2
     const norm = 8 / (Math.PI * Math.PI);
     for (let n = 1; ; n += 2) {
       const f = n * f0; if (f > fmax) break;
@@ -231,193 +334,30 @@
     }
     return stems;
   }
-  
-  function genWave(t, f0, amp, wave){
-    const out = new Float64Array(t.length);
-    for (let i = 0; i < t.length; i++){
-      const phase = f0 * t[i];
-      let v = 0;
-      if (wave === 'Sine') v = Math.sin(2*Math.PI*phase);
-      else if (wave === 'Square') v = Math.sign(Math.sin(2*Math.PI*phase));
-      else v = triangleWave(phase);
-      out[i] = amp * v;
-    }
-    return out;
-  }
 
-  function aliasFundamental(f, fs){
-    return Math.abs(f - fs * Math.round(f / fs));
-  }
-
-  function hannWindow(N){
-    const w = new Float64Array(N);
-    for(let n=0;n<N;n++) w[n] = 0.5 * (1 - Math.cos(2*Math.PI*n/(N-1)));
-    return w;
-  }
-
-  // Minimal radix-2 FFT
-  function fft(real, imag){
-    const n = real.length;
-    if ((n & (n-1)) !== 0) throw new Error('FFT size must be power of 2');
-    let j=0;
-    for (let i=0;i<n;i++){
-      if (i<j){ [real[i],real[j]]=[real[j],real[i]]; [imag[i],imag[j]]=[imag[j],imag[i]]; }
-      let m = n>>>1;
-      while(m>=1 && j>=m){ j-=m; m>>>=1; }
-      j+=m;
-    }
-    for (let len=2; len<=n; len<<=1){
-      const half=len>>>1;
-      const theta=-2*Math.PI/len;
-      const wpr=Math.cos(theta), wpi=Math.sin(theta);
-      for (let i=0;i<n;i+=len){
-        let wr=1, wi=0;
-        for (let k=0;k<half;k++){
-          const j1=i+k, j2=j1+half;
-          const tr=wr*real[j2]-wi*imag[j2];
-          const ti=wr*imag[j2]+wi*real[j2];
-          real[j2]=real[j1]-tr; imag[j2]=imag[j1]-ti;
-          real[j1]+=tr; imag[j1]+=ti;
-          const wrn=wr*wpr-wi*wpi; wi=wr*wpi+wi*wpr; wr=wrn;
-        }
-      }
-    }
-  }
-
-  function dbfsSpectrum(x, fs, fftSize, useHann){
-    const N = Math.min(fftSize, 1 << Math.floor(Math.log2(x.length)));
-    let CG = 1.0;
-    let real = new Float64Array(N);
-    let imag = new Float64Array(N);
-    if (useHann){
-      const w = hannWindow(N);
-      CG = 0;
-      for (let i=0;i<N;i++){ real[i] = (x[i]||0) * w[i]; CG += w[i]; }
-      CG /= N; // coherent gain
-    } else {
-      for (let i=0;i<N;i++) real[i] = x[i]||0;
-    }
-    // imag already zero
-    fft(real, imag);
-    const half = N>>>1;
-    const mags = new Float64Array(half);
-    // one-sided scaling
-    const scale = 2.0 / (N * CG);
-    for (let k=0;k<half;k++) mags[k] = Math.hypot(real[k], imag[k]) * scale;
-    mags[0] *= 0.5; // DC fix
-
-    // dBFS relative to full-scale sine peak=1
-    const db = new Float64Array(half);
-    const eps = 1e-20;
-    for (let k=0;k<half;k++) db[k] = 20 * Math.log10(Math.max(mags[k], eps));
-
-    const freqs = new Float64Array(half);
-    for (let k=0;k<half;k++) freqs[k] = (k*fs)/N;
-    return { db, freqs };
-  }
-
-  function prepCanvas(canvas){
-    const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-    const cssW = canvas.clientWidth || canvas.width;
-    const cssH = canvas.clientHeight || canvas.height;
-    if (canvas.width !== Math.floor(cssW * dpr) || canvas.height !== Math.floor(cssH * dpr)){
-      canvas.width = Math.floor(cssW * dpr);
-      canvas.height = Math.floor(cssH * dpr);
-    }
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-    return {ctx, W: cssW, H: cssH};
-  }
-
-  function drawTime(canvas, t, x, points, opts={}) {
-    const {ctx, W, H} = prepCanvas(canvas);
-    const { autoscale=false, headroom=1.1 } = opts;
-
-    ctx.clearRect(0,0,W,H);
-    ctx.fillStyle = '#0b1020'; ctx.fillRect(0,0,W,H);
-
-    // peak detection for autoscale
-    let peak = 1.0;
-    if (autoscale) {
-      peak = 1e-9;
-      for (let i=0;i<x.length;i++){ const a=Math.abs(x[i]); if (a>peak) peak=a; }
-      peak *= headroom;              // a bit of headroom
-    }
-    const yScale = (H*0.45) / peak;  // 0.45 keeps some top/bottom margin
-
-    // midline
-    ctx.strokeStyle = '#334155'; ctx.globalAlpha=0.7;
-    ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke(); ctx.globalAlpha=1;
-
-    // curve
-    ctx.strokeStyle = '#60a5fa'; ctx.lineWidth=2; ctx.beginPath();
-    const xmin=t[0], xmax=t[t.length-1];
-    for (let i=0;i<t.length;i++){
-      const xPix = ((t[i]-xmin)/(xmax-xmin))*(W-1);
-      const yPix = H/2 - x[i]*yScale;
-      if (i===0) ctx.moveTo(xPix,yPix); else ctx.lineTo(xPix,yPix);
-    }
-    ctx.stroke();
-
-    // points
-    if (points){
-      ctx.fillStyle = '#fbbf24';
-      const tS = points.tS, xS = points.xS;
-      for (let i=0;i<tS.length;i++){
-        const tt = tS[i]; if (tt<xmin || tt>xmax) continue;
-        const xPix=((tt-xmin)/(xmax-xmin))*(W-1);
-        const yPix=H/2 - xS[i]*yScale;
-        ctx.beginPath(); ctx.arc(xPix,yPix,3,0,Math.PI*2); ctx.fill();
-      }
-    }
-  }
-  const FMAX_VIEW = 200000; // 200 kHz fixed right edge
-  // Central color palette
-  const COLORS = {
-    background:   '#0b1020',
-    grid:         '#334155',
-    labels:       '#cbd5e1',
-
-    nyquistLine:  '#ef4444',
-    nyquistText:  '#cbd5e1',
-
-    fundamentalMarker: '#93c5fd', // dashed marker at f0
-    aliasMarker:       '#f59e0b', // dashed marker at alias(f0)
-
-    fftCurve:     '#a78bfa',      // only if showFFT
-    stemBelow:    '#f59e0b',      // ideal harmonics ≤ Nyquist
-    stemAbove:    '#60a5fa',      // ideal harmonics > Nyquist
-    aliasStem:    '#1e3a8a'       // red reflections (folded to baseband)
-    
-  };
-  
-  function drawSpectrum(
-    canvas, db, freqs, fs, f0, aliasF, wave, amp,
-    opts={}
-  ){
+  // ======= Spectrum (no FFT) =======
+  function drawSpectrum(canvas, fs, f0, wave, amp, opts = {}) {
     const {
-      showFFT = false,        // draw measured FFT curve?
-      showViewLabel = true,   // draw the fixed-view caption
-      dbFloor = -60,         // bottom of dB axis
-      fmin = 10,              // left edge (Hz)
-      fmax = FMAX_VIEW        // right edge (Hz) — define FMAX_VIEW elsewhere
+      dbFloor = -60,             // bottom of the dB axis
+      fmin = 10,                 // left edge
+      fmax = FMAX_VIEW,          // right edge
     } = opts;
 
-    const {ctx, W, H} = prepCanvas(canvas);
+    const { ctx, W, H } = prepCanvas(canvas);
 
-    // ---- helpers ----
+    // mappers
     const a = Math.log10(fmin), b = Math.log10(fmax);
-    const logX = (f)=>{
+    const logX = (f) => {
       const t = (Math.log10(Math.max(f, fmin)) - a) / (b - a);
-      return Math.min(W-1, Math.max(0, t * (W-1)));
+      return Math.min(W - 1, Math.max(0, t * (W - 1)));
     };
-    const dbToY = (dB)=>{
+    const dbToY = (dB) => {
       const clamped = Math.max(dbFloor, Math.min(0, dB));
       return H - ((clamped - dbFloor) / (0 - dbFloor)) * H;
     };
 
-    // ---- background ----
-    ctx.clearRect(0,0,W,H);
+    // background
+    ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = COLORS.background;
     ctx.fillRect(0,0,W,H);
 
@@ -426,25 +366,24 @@
     const freqTicks = [10,20,30,40,50,60,70,80,90,
                        100,200,300,400,500,600,800,900,
                        1000,2000,3000,4000,5000,6000,7000,8000,9000,
-                       10000,20000,30000,40000,50000,600000,700000,80000,900000,100000,200000];
+                       10000,20000,30000,40000,50000,600000,700000,80000,900000,
+					   100000,200000];
+					   
     const majorFreqTicks = [100, 1000, 10000, 100000];
     const majorSet = new Set(majorFreqTicks);
-    
-    // horizontal (dB)
+
+    // horizontal dB
     ctx.strokeStyle = COLORS.grid; ctx.lineWidth = 1; ctx.globalAlpha = 0.6;
     ctx.beginPath();
-    for (const d of dbTicks){ const y = dbToY(d); ctx.moveTo(0,y); ctx.lineTo(W,y); }
+    for (const d of dbTicks) { const y = dbToY(d); ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
     ctx.globalAlpha = 1;
 
-    // --- vertical grid (log-f) ---
-    // minor lines
+    // vertical (minor)
     ctx.save();
-    ctx.strokeStyle = COLORS.grid;
-    ctx.globalAlpha = 0.35;
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = COLORS.grid; ctx.globalAlpha = 0.35; ctx.lineWidth = 1;
     ctx.beginPath();
-    for (const f of freqTicks){
+    for (const f of freqTicks) {
       if (f < fmin || f > fmax || majorSet.has(f)) continue;
       const x = logX(f);
       ctx.moveTo(x, 0); ctx.lineTo(x, H);
@@ -452,13 +391,11 @@
     ctx.stroke();
     ctx.restore();
 
-    // major lines
+    // vertical (major)
     ctx.save();
-    ctx.strokeStyle = COLORS.grid;
-    ctx.globalAlpha = 0.8;
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = COLORS.grid; ctx.globalAlpha = 0.8; ctx.lineWidth = 1.5;
     ctx.beginPath();
-    for (const f of majorFreqTicks){
+    for (const f of majorFreqTicks) {
       if (f < fmin || f > fmax) continue;
       const x = logX(f);
       ctx.moveTo(x, 0); ctx.lineTo(x, H);
@@ -466,209 +403,128 @@
     ctx.stroke();
     ctx.restore();
 
-    // --- X-axis labels (majors only) ---
-    ctx.fillStyle = COLORS.labels;
-    ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    for (const f of majorFreqTicks){
-      if (f < fmin || f > fmax) continue;
-      const x = logX(f);
-      const label = (f >= 1000) ? `${(f/1000).toFixed(0)} kHz` : `${f} Hz`;
-      ctx.fillText(label, x, H - 14);
-    }
-
-    // ---- Nyquist line ----
-    const nyq = fs/2;
+    // Nyquist
+    const nyq = fs / 2;
     const nx = logX(nyq);
-    ctx.setLineDash([6,6]);
+    ctx.setLineDash([6, 6]);
     ctx.strokeStyle = COLORS.nyquistLine;
-    ctx.beginPath(); ctx.moveTo(nx,0); ctx.lineTo(nx,H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(nx, 0); ctx.lineTo(nx, H); ctx.stroke();
     ctx.setLineDash([]);
 
-    // ---- f0 & alias markers (dashed) ----
+    // f0 & its alias markers (dashed)
+    const aliasF0 = aliasFundamental(f0, fs);
     const x0 = logX(Math.min(Math.max(f0, fmin), fmax));
-    const xa = logX(Math.min(Math.max(aliasF, fmin), fmax));
+    const xa = logX(Math.min(Math.max(aliasF0, fmin), fmax));
 
-    ctx.setLineDash([2,4]);
-    ctx.strokeStyle = COLORS.fundamentalMarker;
-    ctx.beginPath(); ctx.moveTo(x0,0); ctx.lineTo(x0,H); ctx.stroke();
+    ctx.setLineDash([2, 4]); ctx.strokeStyle = COLORS.fundamentalMarker;
+    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, H); ctx.stroke();
 
-    ctx.setLineDash([4,4]);
-    ctx.strokeStyle = COLORS.aliasMarker;
-    ctx.beginPath(); ctx.moveTo(xa,0); ctx.lineTo(xa,H); ctx.stroke();
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = COLORS.aliasMarker;
+    ctx.beginPath(); ctx.moveTo(xa, 0); ctx.lineTo(xa, H); ctx.stroke();
     ctx.setLineDash([]);
 
-    // ---- optional measured FFT curve (to Nyquist) ----
-    if (showFFT){
-      ctx.strokeStyle = COLORS.fftCurve; ctx.lineWidth = 2;
-      ctx.beginPath();
-      let started = false;
-      for (let i=1;i<freqs.length;i++){
-        const f = freqs[i];
-        if (f < fmin || f > fmax) continue;
-        const x = logX(f);
-        const y = dbToY(db[i]);
-        if (!started){ ctx.moveTo(x,y); started = true; } else { ctx.lineTo(x,y); }
-      }
-      ctx.stroke();
-    }
+    // Ideal harmonic stems
+    const stems = genHarmonics(wave, f0, amp, fmax);
 
-    // ---- ideal harmonic stems (beyond Nyquist), green/orange ----
-    function genHarmonicsLocal(wave, f0, amp, fmax){
-      const stems = [];
-      if (f0 <= 0) return stems;
-      if (wave === 'Sine'){
-        if (f0 <= fmax) stems.push({ f: f0, a: amp });
-        return stems;
-      }
-      if (wave === 'Square'){
-        const norm = 4 / Math.PI;
-        for (let n=1;;n+=2){
-          const f = n * f0; if (f > fmax) break;
-          stems.push({ f, a: amp * (norm * (1/n)) });
-        }
-        return stems;
-      }
-      // Triangle
-      const norm = 8 / (Math.PI * Math.PI);
-      for (let n=1;;n+=2){
-        const f = n * f0; if (f > fmax) break;
-        stems.push({ f, a: amp * (norm * (1/(n*n))) });
-      }
-      return stems;
-    }
-
-    const stems = genHarmonicsLocal(wave, f0, amp, fmax);
-
-    // originals
+    // Originals (green/orange)
     ctx.lineWidth = 1.5;
-    for (const {f, a: ampl} of stems){
+    for (const { f, a: ampl } of stems) {
       if (f < fmin || f > fmax) continue;
       const x = logX(f);
       const y = dbToY(20 * Math.log10(Math.max(ampl, 1e-12)));
       ctx.strokeStyle = (f <= nyq) ? COLORS.stemBelow : COLORS.stemAbove;
-      ctx.beginPath(); ctx.moveTo(x, H-1); ctx.lineTo(x, y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, H - 1); ctx.lineTo(x, y); ctx.stroke();
     }
 
-    // red reflections (aliases) at folded frequency
-    for (const {f, a: ampl} of stems){
-      if (f <= nyq) continue;
-      const fa = Math.abs(f - fs * Math.round(f / fs)); // your alias mapping
+    // Red reflections (aliases)
+    for (const { f, a: ampl } of stems) {
+      if (f <= nyq) continue; // only mirror those above Nyquist
+      const fa = Math.abs(f - fs * Math.round(f / fs));
       if (fa < fmin || fa > fmax) continue;
       const xA = logX(fa);
       const yA = dbToY(20 * Math.log10(Math.max(ampl, 1e-12)));
       ctx.strokeStyle = COLORS.aliasStem;
-      ctx.beginPath(); ctx.moveTo(xA, H-1); ctx.lineTo(xA, yA); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(xA, H - 1); ctx.lineTo(xA, yA); ctx.stroke();
     }
 
-    // ---- labels ----
+    // X labels (majors only)
     ctx.fillStyle = COLORS.labels;
     ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
-
-    ctx.fillStyle = COLORS.labels;
-    ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    for (const f of majorFreqTicks){
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (const f of majorFreqTicks) {
       if (f < fmin || f > fmax) continue;
       const x = logX(f);
-      const label = (f >= 1000) ? `${(f/1000).toFixed(0)} kHz` : `${f} Hz`;
+      const label = (f >= 1000) ? `${(f / 1000).toFixed(0)} kHz` : `${f} Hz`;
       ctx.fillText(label, x, H - 14);
     }
 
-
-    // dB labels (left)
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    for (const d of dbTicks){
-      // ctx.fillText(`${d}`, 4, dbToY(d));
-    }
-
-    // top-right labels
+    // Top-right: Nyquist
     ctx.textAlign = 'right'; ctx.textBaseline = 'top';
     ctx.fillStyle = COLORS.nyquistText;
-    ctx.fillText(`${(nyq/1000).toFixed(1)} kHz (Nyquist)`, W - 6, 6);
-    //if (showViewLabel) ctx.fillText(`${(fmax/1000).toFixed(0)} kHz (view)`, W - 6, 20);
+    ctx.fillText(`${(nyq / 1000).toFixed(1)} kHz (Nyquist)`, W - 6, 6);
   }
-  
-  function analyzeSpectrum(xS, fs, fftSize, useHann){
-    const {db, freqs} = dbfsSpectrum(xS, fs, fftSize, useHann);
-    return {db, freqs};
-  }
-  function render(){
+
+  // ======= Render loop (no FFT) =======
+  function render() {
     // 0..1 slider → log Hz
     const sliderVal = parseFloat(els.freq.value);
     const f0 = FREQ_MIN * Math.pow(FREQ_MAX / FREQ_MIN, sliderVal);
 
     const fs = +els.fs.value;
     const wave = els.wave.value;
-    const fftN = 16384;
-    const useHann = true;
     const nyq = fs / 2;
     const amp = 1.0;
 
     // Labels
     els.freqLabel.textContent = fmtHz(f0);
-    const foldedHz = aliasFundamental(f0, fs);
-    els.foldedLabel.textContent = fmtHz(foldedHz);
+    els.foldedLabel.textContent = fmtHz(aliasFundamental(f0, fs));
     els.readout.textContent =
-      `Fs: ${(fs/1000).toFixed(1)} kHz · Nyquist: ${(nyq/1000).toFixed(1)} kHz · ` +
-      `Fundamental folds to ${(foldedHz/1000).toFixed(3)} kHz (dBFS, Hann=${useHann})`;
+      `Fs: ${(fs / 1000).toFixed(1)} kHz · Nyquist: ${(nyq / 1000).toFixed(1)} kHz`;
 
-    // FFT block length drives duration
-    const nSamp = fftN;
-    const duration = nSamp / fs;
-
-    // Sampled signal
-    const tSamp = new Float64Array(nSamp);
-    for (let n = 0; n < nSamp; n++) tSamp[n] = n / fs;
-    const xSamp = genWave(tSamp, f0, amp, wave);
-
-    // Continuous view window
+    // Time windows
     const cycles = 3;
-    const window = Math.max(1e-6, Math.min(duration, cycles / Math.max(f0, 1e-9)));
+    const viewWindow = Math.max(1e-6, cycles / Math.max(f0, 1e-9)); // show ~3 cycles
     const viewCount = 1600;
     const tView = new Float64Array(viewCount);
-    for (let i = 0; i < viewCount; i++) tView[i] = i * (window / (viewCount - 1));
+    for (let i = 0; i < viewCount; i++) tView[i] = i * (viewWindow / (viewCount - 1));
     const xCont = genWave(tView, f0, amp, wave);
 
-    // Sinc reconstruction around the view
+    // Sampled signal (use enough samples to cover the view + ±5T for sinc)
     const T = 1 / fs;
-    const left = -5 * T, right = window + 5 * T;
-    const i0 = Math.max(0, Math.floor(left * fs));
-    const i1 = Math.min(tSamp.length, Math.ceil(right * fs));
-    const tPart = tSamp.subarray(i0, i1);
-    const xPart = xSamp.subarray(i0, i1);
-    const xRecon = (function sincRecon(samples, tS, tR){
+    const left = -5 * T, right = viewWindow + 5 * T;
+    const nSamp = Math.max(64, Math.ceil((right - left) * fs));
+    const tSamp = new Float64Array(nSamp);
+    for (let n = 0; n < nSamp; n++) tSamp[n] = left + n / fs;
+    const xSamp = genWave(tSamp, f0, amp, wave);
+
+    // Sinc reconstruction around the view
+    const xRecon = (function sincRecon(samples, tS, tR) {
       const T = tS[1] - tS[0];
       const y = new Float64Array(tR.length);
-      for (let i = 0; i < tS.length; i++){
+      for (let i = 0; i < tS.length; i++) {
         const si = samples[i];
-        for (let j = 0; j < tR.length; j++){
+        for (let j = 0; j < tR.length; j++) {
           const u = (tR[j] - tS[i]) / T;
-          y[j] += si * (u === 0 ? 1 : Math.sin(Math.PI*u)/(Math.PI*u));
+          y[j] += si * (u === 0 ? 1 : Math.sin(Math.PI * u) / (Math.PI * u));
         }
       }
       return y;
-    })(xPart, tPart, tView);
+    })(xSamp, tSamp, tView);
 
     // Draw
-    drawTime(els.c1, tView, xCont,  { tS: tSamp, xS: xSamp });
+    drawTime(els.c1, tView, xCont, { tS: tSamp, xS: xSamp });
     drawTime(els.c2, tView, xRecon, { tS: tSamp, xS: xSamp }, { autoscale: true });
-
-    const { db, freqs } = analyzeSpectrum(xSamp, fs, fftN, useHann);
-    const aliasF = aliasFundamental(f0, fs);
-    drawSpectrum(els.c3, db, freqs, fs, f0, aliasF, wave, amp);
+    drawSpectrum(els.c3, fs, f0, wave, amp);
   }
 
-
-  // Hook inputs
-  ['input','change'].forEach(evt => {
-      [els.wave, els.freq, els.fs].forEach(el => el.addEventListener(evt, render));
+  // Inputs
+  ['input', 'change'].forEach(evt => {
+    [els.wave, els.freq, els.fs].forEach(el => el.addEventListener(evt, render));
   });
   window.addEventListener('resize', render);
 
   render();
-})();</script>
+})();
+</script>
 </body>
 </html>
