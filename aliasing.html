@@ -152,6 +152,7 @@
             <option>Sine</option>
             <option>Square</option>
             <option>Triangle</option>
+			<option>Sawtooth</option>
           </select>
         </div>
         <div class="row">
@@ -215,7 +216,7 @@
     fftCurve:     '#a78bfa',      // only if showFFT
     stemBelow:    '#f59e0b',      // ideal harmonics ≤ Nyquist
     stemAbove:    '#60a5fa',      // ideal harmonics > Nyquist
-    aliasStem:    '#1e3a8a'       // red reflections (folded to baseband)
+    aliasStem:    '#1e3a8a'       // darkblue reflections (folded to baseband)
   };
   // ======= Helpers =======
   function triangleWave(t) {
@@ -235,12 +236,19 @@
       let v = 0;
       if (wave === 'Sine') v = Math.sin(2 * Math.PI * phase);
       else if (wave === 'Square') v = Math.sign(Math.sin(2 * Math.PI * phase));
-      else v = triangleWave(phase);
+	  else if (wave === 'Triangle') v = triangleWave(phase);
+	  else  v = sawWave(phase);
       out[i] = amp * v;
     }
     return out;
   }
 
+  function sawWave(t){
+	// rising saw in [-1, 1]
+	const frac = t - Math.floor(t);
+	return 2*frac - 1;
+  }
+  
   function aliasFundamental(f, fs) {
     return Math.abs(f - fs * Math.round(f / fs));
   }
@@ -308,32 +316,41 @@
     }
   }
 
-  function genHarmonics(wave, f0, amp, fmax) {
-    const stems = [];
-    if (f0 <= 0) return stems;
+	function genHarmonics(wave, f0, amp, fmax){
+	  const stems = [];
+	  if (f0 <= 0) return stems;
 
-    if (wave === 'Sine') {
-      if (f0 <= fmax) stems.push({ f: f0, a: amp });
-      return stems;
-    }
+	  if (wave === 'Sine') {
+		if (f0 <= fmax) stems.push({ f: f0, a: amp });
+		return stems;
+	  }
 
-    if (wave === 'Square') {
-      const norm = 4 / Math.PI;
-      for (let n = 1; ; n += 2) {
-        const f = n * f0; if (f > fmax) break;
-        stems.push({ f, a: amp * (norm * (1 / n)) });
-      }
-      return stems;
-    }
+	  if (wave === 'Square') {
+		const norm = 4 / Math.PI;            // |H_n| = 4/(π n), odd n
+		for (let n = 1; ; n += 2){
+		  const f = n * f0; if (f > fmax) break;
+		  stems.push({ f, a: amp * (norm * (1/n)) });
+		}
+		return stems;
+	  }
 
-    // Triangle: odd harmonics, amplitude ~ 1/n^2
-    const norm = 8 / (Math.PI * Math.PI);
-    for (let n = 1; ; n += 2) {
-      const f = n * f0; if (f > fmax) break;
-      stems.push({ f, a: amp * (norm * (1 / (n * n))) });
-    }
-    return stems;
-  }
+	  if (wave === 'Triangle') {
+		const norm = 8 / (Math.PI * Math.PI); // |H_n| = 8/(π² n²), odd n
+		for (let n = 1; ; n += 2){
+		  const f = n * f0; if (f > fmax) break;
+		  stems.push({ f, a: amp * (norm * (1/(n*n))) });
+		}
+		return stems;
+	  }
+
+	  // Sawtooth: all harmonics, |H_n| = 2/(π n)
+	  const norm = 2 / Math.PI;
+	  for (let n = 1; ; n++){
+		const f = n * f0; if (f > fmax) break;
+		stems.push({ f, a: amp * (norm * (1/n)) });
+	  }
+	  return stems;
+	}
 
   // ======= Spectrum (no FFT) =======
   function drawSpectrum(canvas, fs, f0, wave, amp, opts = {}) {
