@@ -36,14 +36,24 @@
 
     .app{
       display:grid; gap:20px; padding:20px clamp(16px, 3vw, 36px);
-      grid-template-columns: 320px 1fr; align-items:start;
+      grid-template-columns: 1fr 320px;
+      grid-template-areas: "plots controls";
+      align-items:start;
     }
-    @media (max-width: 980px){ .app{ grid-template-columns: 1fr; } }
+    @media (max-width: 980px){
+      .app{
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "controls"
+          "plots";
+      }
+    } .controls, .plots { grid-column: 1; } } }
 
     .panel{ background:var(--panel); border:1px solid #1a2340; border-radius:16px; box-shadow:0 6px 24px rgba(0,0,0,.35); }
     .panel h2{ margin:0 0 12px; font-size:16px; font-weight:600; color:#e7edff; letter-spacing:.2px }
     .panel .body{ padding:16px; }
 
+    .controls{ grid-area: controls; }
     .controls .group{ border-top:1px dashed #1e2a49; padding-top:14px; margin-top:14px; }
     .controls .group:first-child{ border-top:0; padding-top:0; margin-top:0; }
     .control{ display:grid; grid-template-columns: 1fr auto; align-items:center; gap:12px; margin:10px 0; }
@@ -58,7 +68,7 @@
       background:#0f1527; border:1px solid #223055; color:#cfe0ff; padding:6px 10px; border-radius:10px; font-size:12px; min-width:62px; text-align:center
     }
 
-    .plots{ display:grid; gap:20px }
+    .plots{ display:grid; gap:20px; grid-area: plots; }
 
     .plot-card{ position:relative; }
     .plot-card header{ display:flex; justify-content:space-between; align-items:baseline; background:transparent; border:0; padding:14px 16px 0; }
@@ -98,7 +108,7 @@
         <div class="control">
           <label for="freq">Frequency</label>
           <div class="range">
-            <input id="freq" type="range" min="20" max="10000" step="1" value="220" aria-label="Frequency" />
+            <input id="freq" type="range" min="20" max="10000" step="1" value="1000" aria-label="Frequency" />
             <div class="value-badge"><span id="freqVal">220</span> Hz</div>
           </div>
         </div>
@@ -158,7 +168,7 @@
           <div class="control">
             <label for="dbfloor">Spectrum floor</label>
             <div class="range">
-              <input id="dbfloor" type="range" min="-140" max="-20" step="1" value="-110" aria-label="Spectrum floor in dB" />
+              <input id="dbfloor" type="range" min="-140" max="-20" step="1" value="-30" aria-label="Spectrum floor in dB" />
               <div class="value-badge"><span id="dbfloorVal">-110</span> dB</div>
             </div>
           </div>
