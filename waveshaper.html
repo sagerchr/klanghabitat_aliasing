@@ -80,6 +80,7 @@
     .chip{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; background:#0f1527; border:1px solid #223055; border-radius:999px }
     .chip .swatch{ width:12px; height:12px; border-radius:3px; background:var(--accent) }
     .chip .swatch.alt{ background:var(--accent-2) }
+    .chip .swatch.warn{ background: var(--warn) }
 
     footer{ color:#8aa0cc; font-size:12px; text-align:center; padding:20px 16px 40px }
     footer a{ color:var(--accent); text-decoration:none }
@@ -108,21 +109,21 @@
         <div class="control">
           <label for="freq">Frequency</label>
           <div class="range">
-            <input id="freq" type="range" min="20" max="10000" step="1" value="1000" aria-label="Frequency" />
+            <input id="freq" type="range" min="50" max="10000" step="10" value="1000" aria-label="Frequency" />
             <div class="value-badge"><span id="freqVal">1000</span> Hz</div>
           </div>
         </div>
         <div class="control">
           <label for="amp">Amplitude</label>
           <div class="range">
-            <input id="amp" type="range" min="0.05" max="1.0" step="0.01" value="0.9" aria-label="Amplitude" />
+            <input id="amp" type="range" min="0.1" max="1.0" step="0.1" value="1.0" aria-label="Amplitude" />
             <div class="value-badge"><span id="ampVal">0.90</span></div>
           </div>
         </div>
         <div class="control">
           <label for="sr">Sample rate</label>
           <div class="range">
-            <input id="sr" type="range" min="8000" max="96000" step="1000" value="48000" aria-label="Sample rate" />
+            <input id="sr" type="range" min="8000" max="192000" step="1000" value="48000" aria-label="Sample rate" />
             <div class="value-badge"><span id="srVal">48.0</span> kHz</div>
           </div>
         </div>
@@ -222,7 +223,10 @@
       <article class="panel plot-card">
         <header>
           <h3>Spectrum (waveshaped)</h3>
-          <div class="legend"><span class="chip"><span class="swatch"></span> magnitude</span></div>
+          <div class="legend">
+            <span class="chip"><span class="swatch"></span> magnitude</span>
+            <span class="chip"><span class="swatch warn"></span> ideal > Nyquist</span>
+          </div>
         </header>
         <div class="body" style="padding:0">
           <canvas id="spec" width="1200" height="320" aria-label="Spectrum plot"></canvas>
@@ -300,7 +304,7 @@
       }
       ctx.stroke();
     }
-    function drawSpectrum(canvas, magsDB, sampleRate){
+    function drawSpectrum(canvas, magsDB, sampleRate, ideal){
       const ctx = canvas.getContext('2d');
       const W = canvas.width, H = canvas.height;
 
@@ -410,6 +414,7 @@
 
       // ---- spectrum trace ----
       const N2 = magsDB.length; // bins up to Nyquist
+      // Main (up to Nyquist) — cyan
       ctx.save();
       ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent');
       ctx.lineWidth = 1.6; ctx.beginPath();
@@ -439,7 +444,41 @@
       }
       ctx.stroke();
       ctx.restore();
+
+      // Overlay beyond Nyquist — orange (ideal extension via oversampled analysis)
+      if (ideal && ideal.magsDB && ideal.magsDB.length > 1) {
+        const magsHi = ideal.magsDB;
+        const hiSR = ideal.sampleRate;
+        const hiNyq = hiSR * 0.5;
+        const N2h = magsHi.length;
+        ctx.save();
+        ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--warn');
+        ctx.lineWidth = 1.2; ctx.beginPath();
+        let prevHas = false;
+        for (let x = padL; x <= W - padR; x++) {
+          const fL = Math.pow(10, logLo + ((x - padL - 0.5) / plotW) * (logHi - logLo));
+          const fR = Math.pow(10, logLo + ((x - padL + 0.5) / plotW) * (logHi - logLo));
+          const spanMin = Math.max(fmin, Math.min(fL, fR));
+          const spanMax = Math.min(fmax, Math.max(fL, fR));
+          const lo = Math.max(nyq, spanMin);
+          const hi = Math.min(spanMax, hiNyq);
+          if (hi <= lo) { prevHas = false; continue; }
+          let kL = Math.floor((lo / hiNyq) * (N2h - 1));
+          let kR = Math.ceil ((hi / hiNyq) * (N2h - 1));
+          if (kR < kL) { const tmp = kL; kL = kR; kR = tmp; }
+          kL = Math.max(0, Math.min(N2h - 1, kL));
+          kR = Math.max(0, Math.min(N2h - 1, kR));
+          let peakDB = -300;
+          for (let kk = kL; kk <= kR; kk++) if (magsHi[kk] > peakDB) peakDB = magsHi[kk];
+          const yy = Math.min(H - padB, Math.max(padT, dbToY(peakDB)));
+          const xpix = x;
+          if (!prevHas) { ctx.moveTo(xpix, yy); prevHas = true; } else { ctx.lineTo(xpix, yy); }
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
     }
+
 
     // ===== Signal generation =====
     function genWave(type, freq, amp, sampleRate, length){
@@ -540,6 +579,21 @@
       return magsDB;
     }
 
+    // Oversampled 'ideal' overlay computation to extend beyond Nyquist
+    function computeIdealOverlay(sampleRate, fftLen, type, f, A, sh, drv, th, winType){
+      const targetFmax = 200000; // match drawSpectrum's fmax
+      const neededOSR = Math.ceil((targetFmax*2) / sampleRate); // ensure hi Nyquist >= targetFmax
+      const OSR = Math.max(2, Math.min(16, neededOSR)); // cap for perf
+      const hiSR = sampleRate * OSR;
+      const MAX_HI_LEN = 262144; // cap FFT work for perf
+      const hiLen = Math.min(MAX_HI_LEN, Math.max(2048, fftLen * OSR));
+      // Build oversampled signal
+      const inHi = genWave(type, f, A, hiSR, hiLen);
+      const shapedHi = applyShaper(inHi, sh, drv, th);
+      const magsDBHi = spectrumDB(shapedHi, hiSR, winType);
+      return { magsDB: magsDBHi, sampleRate: hiSR };
+    }
+
     // ===== Controller =====
     function updateLabels(){
       freqVal.textContent = parseInt(freq.value,10);
@@ -588,7 +642,8 @@
 
       const winType = winTypeSel.value;
       const magsDB = spectrumDB(shapedFFT, sampleRate, winType);
-      drawSpectrum(spec, magsDB, sampleRate);
+      const idealOverlay = computeIdealOverlay(sampleRate, fftLen, type, f, A, sh, drv, th, winType);
+      drawSpectrum(spec, magsDB, sampleRate, idealOverlay);
 
       // toggle clip threshold control visibility
       clipCtl.style.display = (sh === 'hard') ? 'grid' : 'none';
