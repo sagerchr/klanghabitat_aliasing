@@ -5,130 +5,158 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Aliasing Demo — dBFS, Windowing</title>
 <style>
-    :root {
-      --bg: #0b1020;
-      --panel: #111827;
-      --card: #1f2937;
-      --text: #e5e7eb;
-      --muted: #9ca3af;
-      --accent: #60a5fa;
-      --accent2: #a78bfa;
-      --warn: #fbbf24;
-      --nyq: #ef4444;
-      --grid: #334155;
+  /* === Waveshaper theme tokens === */
+  :root{
+      --bg:#0b0f18;         /* deep blue-black */
+      --panel:#121829;      /* card bg */
+      --ink:#d9e1ff;        /* primary text */
+      --muted:#92a1c6;      /* secondary text */
+      --accent:#44e0ff;     /* cyan accent */
+      --accent-2:#7ef7cf;   /* mint accent */
+      --grid:#23304d;       /* plot grid */
+      --good:#1ee0a1;
+      --warn:#ffb454;
+  }
+
+  *{ box-sizing: border-box }
+  html, body { height: 100% }
+  body{
+		margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+		background: linear-gradient(180deg, #0b0f18 0%, #0a1020 100%);
+		color:var(--ink);
+		display:flex; flex-direction:column;
+
+  }
+
+  /* Header */
+	header{
+      padding:20px clamp(16px, 3vw, 36px);
+      border-bottom:1px solid #16203a;
+      background: radial-gradient(1200px 240px at 20% -10%, rgba(68,224,255,.15), transparent),
+                  radial-gradient(900px 200px at 80% -10%, rgba(126,247,207,.1), transparent);
     }
+    header h1{margin:0; font-size:clamp(24px, 2.4vw, 34px); letter-spacing:.3px}
+    header p{margin:.35rem 0 0; color:var(--muted)}
 
-    html, body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
-    .wrap { padding: 16px; }
-    h1 { margin: 0 0 6px; font-size: 24px; font-weight: 600; }
-    .sub { color: var(--muted); margin-bottom: 16px; font-size: 14px; }
-    .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
-    .card { margin: 6px 6px 6px; background: var(--card); border: 1px solid #1f2937; border-radius: 12px; padding: 10px; }
-    .card h2 { margin: 6px 6px 10px; font-size: 14px; font-weight: 600; color: var(--text); }
-    canvas { width: 100%; height: 220px; background: black; border-radius: 10px; display:block; }
-    .controls .row { margin-bottom: 14px; }
-    label { font-size: 12px; display:block; margin-bottom: 4px; color: var(--text); }
+	
+  .sub{
+    color: var(--muted);
+    font-size: 13px;
+    background: radial-gradient(900px 200px at 10% -10%, rgba(68,224,255,.12), transparent),
+                radial-gradient(700px 180px at 90% -10%, rgba(126,247,207,.08), transparent);
+    border: 1px solid #16203a;
+    border-radius: 12px;
+    padding: 10px 12px;
+    display:inline-block;
+    margin-bottom: 14px;
+  }
 
-    /* === Bigger selects & sliders === */
-    select, input[type=range] { width: 100%; }
+  /* Layout */
+  .grid { display: grid; gap: 16px; grid-template-columns: 2fr 1fr; }
+  @media (max-width: 980px){ .grid { grid-template-columns: 1fr; } }
 
-    /* Selects: taller and easier to hit */
-    select {
-      appearance: none;
-      -webkit-appearance: none;
-      -moz-appearance: none;
+  /* Cards */
+  .card{
+    background: var(--panel);
+    border: 1px solid #1a2340;
+    border-radius: 16px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.35);
+	margin: 12px;
+    padding: 6px;
+  }
+  .card h2{
+    margin: 2px 4px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color:#e7edff;
+    letter-spacing:.2px;
+  }
 
-      background: var(--panel)
-        url("data:image/svg+xml;utf8,<svg fill='%23e5e7eb' height='14' viewBox='0 0 20 20' width='14' xmlns='http://www.w3.org/2000/svg'><path d='M5.25 7.5l4.75 4.75 4.75-4.75' /></svg>")
-        no-repeat right 12px center;
-      background-size: 14px 14px;
+  canvas { width: 100%; height: 220px; display:block; border-radius: 10px; background:black }
 
-      color: var(--text);
-      border: 1px solid #374151;
-      border-radius: 8px;
+  /* Controls panel */
+  .controls { position: sticky; top: 12px; }
+  .controls .row { margin-bottom: 14px; }
+  label { font-size: 13px; color: var(--muted); display:block; margin-bottom: 6px; }
 
-      height: 30px;
-      padding: 6px 36px 6px 12px; /* extra space for arrow */
-      font-size: 14px;
-      line-height: 1;
+  /* Inputs (selects) */
+  select{
+    appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    background:#0f1527
+      url("data:image/svg+xml;utf8,<svg fill='%23cfe0ff' height='14' viewBox='0 0 20 20' width='14' xmlns='http://www.w3.org/2000/svg'><path d='M5.25 7.5l4.75 4.75 4.75-4.75' /></svg>")
+      no-repeat right 12px center;
+    background-size:14px 14px;
+    color:var(--ink);
+    border:1px solid var(--hair);
+    border-radius:10px;
+    padding:10px 38px 10px 12px;
+    font-size:14px;
+    outline:none;
+    width:100%;
+  }
+  select:focus{ border-color: var(--accent); box-shadow: 0 0 0 3px rgba(68,224,255,.18); }
 
-      cursor: pointer;
-      transition: background-color 0.2s ease, border-color 0.2s ease;
-    }
+  /* ==== Waveshaper-style range (WebKit + Firefox) ==== */
+  .range{ display:flex; align-items:center; gap:10px }
+  input[type="range"]{
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 40px;
+    background: transparent; border:0; margin:0; padding:0;
+    /* theme hooks + dynamic fill */
+    --range-track: #0f1527;
+    --range-fill:  var(--accent);
+    --range-hair:  var(--hair);
+    --pct: 50%;
+  }
+  /* WebKit track */
+  input[type="range"]::-webkit-slider-runnable-track{
+    height:10px; border-radius:999px;
+    background-color: var(--range-track);                      /* unfilled */
+    background-image: linear-gradient(90deg, var(--range-fill), var(--range-fill)); /* filled */
+    background-size: var(--pct) 100%;
+    background-repeat: no-repeat;
+    box-shadow: inset 0 0 0 1px var(--range-hair);
+  }
+  /* WebKit thumb */
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:16px; height:16px; border-radius:50%;
+    background: var(--range-fill);
+    border:2px solid #0b0f18;
+    margin-top: calc((10px - 16px)/2);
+    transition: box-shadow .15s ease, transform .1s ease;
+  }
+  input[type="range"]:hover::-webkit-slider-thumb{ box-shadow:0 0 0 8px rgba(68,224,255,.12); }
+  input[type="range"]:active::-webkit-slider-thumb{ transform:scale(.96); }
+  input[type="range"]:focus{ outline:none; box-shadow:0 0 0 3px rgba(68,224,255,.18); border-radius:12px; }
 
-    select:hover {
-      background-color: #1e2533;
-    }
-    /* Range: reset native styles so we control height */
-    input[type=range] {
-      -webkit-appearance: none;
-      appearance: none;
-      background: transparent;   /* track styled below */
-      border: none;
-      height: 40px;              /* overall control height */
-      padding: 0;
-      margin: 0;
-    }
+  /* Firefox track + progress */
+  input[type="range"]::-moz-range-track{
+    height:10px; border-radius:999px;
+    background: var(--range-track);
+    box-shadow: inset 0 0 0 1px var(--range-hair);
+  }
+  input[type="range"]::-moz-range-progress{
+    height:10px; border-radius:999px;
+    background: var(--range-fill);
+  }
+  /* Firefox thumb */
+  input[type="range"]::-moz-range-thumb{
+    width:16px; height:16px; border-radius:50%;
+    background: var(--range-fill);
+    border:2px solid #0b0f18;
+  }
 
-    /* Track */
-    input[type=range]::-webkit-slider-runnable-track {
-      height: 8px;               /* thicker track */
-      background: var(--grid);
-      border-radius: 999px;
-    }
-    input[type=range]::-moz-range-track {
-      height: 8px;
-      background: var(--grid);
-      border-radius: 999px;
-    }
 
-    /* Thumb */
-    input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 18px;               /* bigger knob */
-      height: 18px;
-      border-radius: 50%;
-      background: var(--accent);
-      border: 2px solid #1f2937;
-      margin-top: calc((8px - 18px) / 2); /* center on track */
-    }
-    input[type=range]::-moz-range-thumb {
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: var(--accent);
-      border: 2px solid #1f2937;
-    }
-
-    /* Focus ring for a11y */
-    select:focus,
-    input[type=range]:focus {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
-    }
-
-    /* Bigger checkbox (optional) */
-    input[type=checkbox] {
-      background: var(--panel);
-      color: var(--text);
-      border: 1px solid #374151;
-      border-radius: 6px;
-      transform: scale(1.2);
-      accent-color: var(--accent);
-    }
-
-    .inline { display:flex; align-items:center; gap:8px; }
-    .hint { font-size: 11px; color: var(--muted); }
-
-    @media (max-width: 900px) {
-      .grid { grid-template-columns: 1fr; }
-    }
+  .hint { font-size: 11px; color: var(--muted); }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>klanghabitat Aliasing Demo</h1>
-    <div class="sub" id="readout"></div>
+  <header>
+    <h1>Aliasing</h1>
+    <p>See how Aliasing creates folding to the reproduced signal if Nyquist is exeeded.</p>
+  </header>
+
     <div class="grid">
       <div class="left">
         <div class="card">
@@ -144,22 +172,29 @@
           <canvas id="c3"></canvas>
         </div>
       </div>
+
       <div class="card controls">
         <h2>Controls</h2>
+
         <div class="row">
           <label for="wave">Waveform</label>
           <select id="wave">
             <option>Sine</option>
             <option>Square</option>
             <option>Triangle</option>
-			<option>Sawtooth</option>
+            <option>Sawtooth</option>
           </select>
         </div>
+
         <div class="row">
-            <input id="freq" type="range" min="0" max="1" value="0.5" step="0.001" />
-            <label for="freq">Frequency: <span id="freqLabel"></span></label>
-            <div class="hint">Folded: <span id="foldedLabel"></span></div>
+          <label for="freq">Frequency</label>
+          <div class="range">
+            <input id="freq" type="range" min="0.2" max="1" value="0.5" step="0.001" />
+            <div class="value-badge" id="freqBadge">—</div>
+          </div>
+          <div class="hint">Folded: <span id="foldedLabel"></span></div>
         </div>
+
         <div class="row">
           <label for="fs">Sample rate</label>
           <select id="fs">
@@ -173,11 +208,14 @@
             <option value="192000">192 kHz</option>
           </select>
         </div>
-          <div class="row">
-        <div class="hint">Tip: push the tone above Nyquist to watch it mirror. Use Square/Triangle to provoke dense aliasing from higher harmonics.</div>
+
+        <div class="row">
+          <div class="hint">Tip: push the tone above Nyquist to watch it mirror. Use Square/Triangle to provoke dense aliasing from higher harmonics.</div>
+        </div>
       </div>
     </div>
   </div>
+
 <script>
 (function () {
   const els = {
@@ -188,7 +226,7 @@
     freq: document.getElementById('freq'),
     fs: document.getElementById('fs'),
     readout: document.getElementById('readout'),
-    freqLabel: document.getElementById('freqLabel'),
+    freqBadge: document.getElementById('freqBadge'),
     foldedLabel: document.getElementById('foldedLabel'),
   };
 
@@ -196,39 +234,36 @@
   const FREQ_MIN = 20;       // slider low end (Hz)
   const FREQ_MAX = 80000;    // slider high end (Hz)
   const FMAX_VIEW = 200000;  // spectrum right edge (Hz)
-  const CURVE_COLOR = '#1e3a8a'; // dark blue for time-domain curves
+  const CURVE_COLOR = '#1e3a8a'; // time-domain curve color
 
   // Central palette for spectrum
   const COLORS = {
     background:   '#0b1020',
     grid:         '#334155',
     labels:       '#cbd5e1',
-
     nyquistLine:  '#ef4444',
     nyquistText:  '#cbd5e1',
-
-
-    fundamentalMarker: '#93c5fd', // dashed marker at f0
-    aliasMarker:       '#f59e0b', // dashed marker at alias(f0)
-
-
-
-    fftCurve:     '#a78bfa',      // only if showFFT
-    stemBelow:    '#f59e0b',      // ideal harmonics ≤ Nyquist
-    stemAbove:    '#60a5fa',      // ideal harmonics > Nyquist
-    aliasStem:    '#1e3a8a'       // darkblue reflections (folded to baseband)
+    fundamentalMarker: '#93c5fd',
+    aliasMarker:       '#f59e0b',
+    fftCurve:     '#a78bfa',
+    stemBelow:    '#f59e0b',
+    stemAbove:    '#60a5fa',
+    aliasStem:    '#1e3a8a'
   };
+
   // ======= Helpers =======
   function triangleWave(t) {
     const frac = t - Math.floor(t);
     return 2 * Math.abs(2 * frac - 1) - 1;
   }
-
+  function sawWave(t){
+    const frac = t - Math.floor(t);
+    return 2*frac - 1;
+  }
   function fmtHz(v) {
     return v < 1000 ? `${Math.round(v)} Hz`
                     : `${(v / 1000).toFixed(v < 10000 ? 3 : 2)} kHz`;
   }
-
   function genWave(t, f0, amp, wave) {
     const out = new Float64Array(t.length);
     for (let i = 0; i < t.length; i++) {
@@ -236,19 +271,12 @@
       let v = 0;
       if (wave === 'Sine') v = Math.sin(2 * Math.PI * phase);
       else if (wave === 'Square') v = Math.sign(Math.sin(2 * Math.PI * phase));
-	  else if (wave === 'Triangle') v = triangleWave(phase);
-	  else  v = sawWave(phase);
+      else if (wave === 'Triangle') v = triangleWave(phase);
+      else v = sawWave(phase);
       out[i] = amp * v;
     }
     return out;
   }
-
-  function sawWave(t){
-	// rising saw in [-1, 1]
-	const frac = t - Math.floor(t);
-	return 2*frac - 1;
-  }
-  
   function aliasFundamental(f, fs) {
     return Math.abs(f - fs * Math.round(f / fs));
   }
@@ -316,53 +344,21 @@
     }
   }
 
-	function genHarmonics(wave, f0, amp, fmax){
-	  const stems = [];
-	  if (f0 <= 0) return stems;
+  function genHarmonics(wave, f0, amp, fmax){
+    const stems = [];
+    if (f0 <= 0) return stems;
+    if (wave === 'Sine') { if (f0 <= fmax) stems.push({ f: f0, a: amp }); return stems; }
+    if (wave === 'Square') { const norm = 4 / Math.PI; for (let n=1;;n+=2){ const f=n*f0; if (f>fmax) break; stems.push({ f, a: amp * (norm*(1/n)) }); } return stems; }
+    if (wave === 'Triangle') { const norm = 8 / (Math.PI*Math.PI); for (let n=1;;n+=2){ const f=n*f0; if (f>fmax) break; stems.push({ f, a: amp * (norm*(1/(n*n))) }); } return stems; }
+    const norm = 2 / Math.PI;
+    for (let n=1;;n++){ const f=n*f0; if (f>fmax) break; stems.push({ f, a: amp * (norm*(1/n)) }); }
+    return stems;
+  }
 
-	  if (wave === 'Sine') {
-		if (f0 <= fmax) stems.push({ f: f0, a: amp });
-		return stems;
-	  }
-
-	  if (wave === 'Square') {
-		const norm = 4 / Math.PI;            // |H_n| = 4/(π n), odd n
-		for (let n = 1; ; n += 2){
-		  const f = n * f0; if (f > fmax) break;
-		  stems.push({ f, a: amp * (norm * (1/n)) });
-		}
-		return stems;
-	  }
-
-	  if (wave === 'Triangle') {
-		const norm = 8 / (Math.PI * Math.PI); // |H_n| = 8/(π² n²), odd n
-		for (let n = 1; ; n += 2){
-		  const f = n * f0; if (f > fmax) break;
-		  stems.push({ f, a: amp * (norm * (1/(n*n))) });
-		}
-		return stems;
-	  }
-
-	  // Sawtooth: all harmonics, |H_n| = 2/(π n)
-	  const norm = 2 / Math.PI;
-	  for (let n = 1; ; n++){
-		const f = n * f0; if (f > fmax) break;
-		stems.push({ f, a: amp * (norm * (1/n)) });
-	  }
-	  return stems;
-	}
-
-  // ======= Spectrum (no FFT) =======
   function drawSpectrum(canvas, fs, f0, wave, amp, opts = {}) {
-    const {
-      dbFloor = -60,             // bottom of the dB axis
-      fmin = 10,                 // left edge
-      fmax = FMAX_VIEW,          // right edge
-    } = opts;
-
+    const { dbFloor = -60, fmin = 10, fmax = FMAX_VIEW } = opts;
     const { ctx, W, H } = prepCanvas(canvas);
 
-    // mappers
     const a = Math.log10(fmin), b = Math.log10(fmax);
     const logX = (f) => {
       const t = (Math.log10(Math.max(f, fmin)) - a) / (b - a);
@@ -373,52 +369,32 @@
       return H - ((clamped - dbFloor) / (0 - dbFloor)) * H;
     };
 
-    // background
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = COLORS.background;
     ctx.fillRect(0,0,W,H);
 
-    // ---- grids ----
+    // grids
     const dbTicks   = [-140,-120,-100,-80,-60,-40,-20,0];
     const freqTicks = [10,20,30,40,50,60,70,80,90,
                        100,200,300,400,500,600,800,900,
                        1000,2000,3000,4000,5000,6000,7000,8000,9000,
                        10000,20000,30000,40000,50000,600000,700000,80000,900000,
-					   100000,200000];
-					   
+                       100000,200000];
     const majorFreqTicks = [100, 1000, 10000, 100000];
     const majorSet = new Set(majorFreqTicks);
 
-    // horizontal dB
     ctx.strokeStyle = COLORS.grid; ctx.lineWidth = 1; ctx.globalAlpha = 0.6;
     ctx.beginPath();
     for (const d of dbTicks) { const y = dbToY(d); ctx.moveTo(0, y); ctx.lineTo(W, y); }
-    ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.stroke(); ctx.globalAlpha = 1;
 
-    // vertical (minor)
-    ctx.save();
-    ctx.strokeStyle = COLORS.grid; ctx.globalAlpha = 0.35; ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (const f of freqTicks) {
-      if (f < fmin || f > fmax || majorSet.has(f)) continue;
-      const x = logX(f);
-      ctx.moveTo(x, 0); ctx.lineTo(x, H);
-    }
-    ctx.stroke();
-    ctx.restore();
+    ctx.save(); ctx.strokeStyle = COLORS.grid; ctx.globalAlpha = 0.35; ctx.lineWidth = 1; ctx.beginPath();
+    for (const f of freqTicks) { if (f < fmin || f > fmax || majorSet.has(f)) continue; const x = logX(f); ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    ctx.stroke(); ctx.restore();
 
-    // vertical (major)
-    ctx.save();
-    ctx.strokeStyle = COLORS.grid; ctx.globalAlpha = 0.8; ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    for (const f of majorFreqTicks) {
-      if (f < fmin || f > fmax) continue;
-      const x = logX(f);
-      ctx.moveTo(x, 0); ctx.lineTo(x, H);
-    }
-    ctx.stroke();
-    ctx.restore();
+    ctx.save(); ctx.strokeStyle = COLORS.grid; ctx.globalAlpha = 0.8; ctx.lineWidth = 1.5; ctx.beginPath();
+    for (const f of majorFreqTicks) { if (f < fmin || f > fmax) continue; const x = logX(f); ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    ctx.stroke(); ctx.restore();
 
     // Nyquist
     const nyq = fs / 2;
@@ -428,11 +404,10 @@
     ctx.beginPath(); ctx.moveTo(nx, 0); ctx.lineTo(nx, H); ctx.stroke();
     ctx.setLineDash([]);
 
-    // f0 & its alias markers (dashed)
+    // f0 & alias markers
     const aliasF0 = aliasFundamental(f0, fs);
     const x0 = logX(Math.min(Math.max(f0, fmin), fmax));
     const xa = logX(Math.min(Math.max(aliasF0, fmin), fmax));
-
     ctx.setLineDash([2, 4]); ctx.strokeStyle = COLORS.fundamentalMarker;
     ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, H); ctx.stroke();
 
@@ -440,10 +415,8 @@
     ctx.beginPath(); ctx.moveTo(xa, 0); ctx.lineTo(xa, H); ctx.stroke();
     ctx.setLineDash([]);
 
-    // Ideal harmonic stems
+    // Ideal harmonic stems + aliases
     const stems = genHarmonics(wave, f0, amp, fmax);
-
-    // Originals (green/orange)
     ctx.lineWidth = 1.5;
     for (const { f, a: ampl } of stems) {
       if (f < fmin || f > fmax) continue;
@@ -452,10 +425,8 @@
       ctx.strokeStyle = (f <= nyq) ? COLORS.stemBelow : COLORS.stemAbove;
       ctx.beginPath(); ctx.moveTo(x, H - 1); ctx.lineTo(x, y); ctx.stroke();
     }
-
-    // Red reflections (aliases)
     for (const { f, a: ampl } of stems) {
-      if (f <= nyq) continue; // only mirror those above Nyquist
+      if (f <= nyq) continue;
       const fa = Math.abs(f - fs * Math.round(f / fs));
       if (fa < fmin || fa > fmax) continue;
       const xA = logX(fa);
@@ -464,7 +435,7 @@
       ctx.beginPath(); ctx.moveTo(xA, H - 1); ctx.lineTo(xA, yA); ctx.stroke();
     }
 
-    // X labels (majors only)
+    // Labels
     ctx.fillStyle = COLORS.labels;
     ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace';
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
@@ -474,14 +445,17 @@
       const label = (f >= 1000) ? `${(f / 1000).toFixed(0)} kHz` : `${f} Hz`;
       ctx.fillText(label, x, H - 14);
     }
-
-    // Top-right: Nyquist
     ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-    ctx.fillStyle = COLORS.nyquistText;
     ctx.fillText(`${(nyq / 1000).toFixed(1)} kHz (Nyquist)`, W - 6, 6);
   }
 
-  // ======= Render loop (no FFT) =======
+  // === UI niceties ===
+  function updateSliderFill(el){
+    const min = +el.min || 0, max = +el.max || 1, val = +el.value || 0;
+    el.style.setProperty('--pct', ((val - min) / (max - min) * 100) + '%');
+  }
+
+  // ======= Render loop =======
   function render() {
     // 0..1 slider → log Hz
     const sliderVal = parseFloat(els.freq.value);
@@ -493,20 +467,19 @@
     const amp = 1.0;
 
     // Labels
-    els.freqLabel.textContent = fmtHz(f0);
+    els.freqBadge.textContent = fmtHz(f0);
     els.foldedLabel.textContent = fmtHz(aliasFundamental(f0, fs));
-    els.readout.textContent =
-      `Fs: ${(fs / 1000).toFixed(1)} kHz · Nyquist: ${(nyq / 1000).toFixed(1)} kHz`;
+    //els.readout.textContent = `Fs: ${(fs / 1000).toFixed(1)} kHz · Nyquist: ${(nyq / 1000).toFixed(1)} kHz`;
 
-    // Time windows
+    // Time window (~3 cycles)
     const cycles = 3;
-    const viewWindow = Math.max(1e-6, cycles / Math.max(f0, 1e-9)); // show ~3 cycles
+    const viewWindow = Math.max(1e-6, cycles / Math.max(f0, 1e-9));
     const viewCount = 1600;
     const tView = new Float64Array(viewCount);
     for (let i = 0; i < viewCount; i++) tView[i] = i * (viewWindow / (viewCount - 1));
     const xCont = genWave(tView, f0, amp, wave);
 
-    // Sampled signal (use enough samples to cover the view + ±5T for sinc)
+    // Sampled signal (cover view + ±5T for sinc)
     const T = 1 / fs;
     const left = -5 * T, right = viewWindow + 5 * T;
     const nSamp = Math.max(64, Math.ceil((right - left) * fs));
@@ -514,7 +487,7 @@
     for (let n = 0; n < nSamp; n++) tSamp[n] = left + n / fs;
     const xSamp = genWave(tSamp, f0, amp, wave);
 
-    // Sinc reconstruction around the view
+    // Ideal sinc reconstruction
     const xRecon = (function sincRecon(samples, tS, tR) {
       const T = tS[1] - tS[0];
       const y = new Float64Array(tR.length);
@@ -532,6 +505,9 @@
     drawTime(els.c1, tView, xCont, { tS: tSamp, xS: xSamp });
     drawTime(els.c2, tView, xRecon, { tS: tSamp, xS: xSamp }, { autoscale: true });
     drawSpectrum(els.c3, fs, f0, wave, amp);
+
+    // Slider fill
+    updateSliderFill(els.freq);
   }
 
   // Inputs
@@ -540,6 +516,8 @@
   });
   window.addEventListener('resize', render);
 
+  // Init
+  updateSliderFill(els.freq);
   render();
 })();
 </script>
