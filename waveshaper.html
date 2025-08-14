@@ -47,7 +47,7 @@
           "controls"
           "plots";
       }
-    } .controls, .plots { grid-column: 1; } } }
+    }
 
     .panel{ background:var(--panel); border:1px solid #1a2340; border-radius:16px; box-shadow:0 6px 24px rgba(0,0,0,.35); }
     .panel h2{ margin:0 0 12px; font-size:16px; font-weight:600; color:#e7edff; letter-spacing:.2px }
@@ -109,7 +109,7 @@
           <label for="freq">Frequency</label>
           <div class="range">
             <input id="freq" type="range" min="20" max="10000" step="1" value="1000" aria-label="Frequency" />
-            <div class="value-badge"><span id="freqVal">220</span> Hz</div>
+            <div class="value-badge"><span id="freqVal">1000</span> Hz</div>
           </div>
         </div>
         <div class="control">
@@ -143,7 +143,7 @@
           <div class="control">
             <label for="drive">Drive</label>
             <div class="range">
-              <input id="drive" type="range" min="0" max="10" step="0.1" value="3" aria-label="Drive" />
+              <input id="drive" type="range" min="0.1" max="10" step="0.1" value="0.1" aria-label="Drive" />
               <div class="value-badge"><span id="driveVal">3.0</span>×</div>
             </div>
           </div>
@@ -169,8 +169,29 @@
             <label for="dbfloor">Spectrum floor</label>
             <div class="range">
               <input id="dbfloor" type="range" min="-140" max="-20" step="1" value="-30" aria-label="Spectrum floor in dB" />
-              <div class="value-badge"><span id="dbfloorVal">-110</span> dB</div>
+              <div class="value-badge"><span id="dbfloorVal">-30</span> dB</div>
             </div>
+          </div>
+        <div class="group">
+          <h2>Spectrum</h2>
+          <div class="control">
+            <label for="fftSize">FFT size</label>
+            <select id="fftSize" aria-label="FFT size">
+              <option value="2048">2048</option>
+              <option value="4096">4096</option>
+              <option value="8192" selected>8192</option>
+              <option value="16384">16384</option>
+              <option value="32768">32768</option>
+            </select>
+          </div>
+          <div class="control">
+            <label for="winType">Window</label>
+            <select id="winType" aria-label="FFT window type">
+              <option value="hann" selected>Hann</option>
+              <option value="blackmanharris">Blackman–Harris</option>
+              <option value="blackman">Blackman</option>
+              <option value="rect">Rectangular</option>
+            </select>
           </div>
         </div>
       </div>
@@ -234,6 +255,11 @@
     const cycles = $('#cycles'); const cyclesVal = $('#cyclesVal');
     const dbfloor = $('#dbfloor'); const dbfloorVal = $('#dbfloorVal');
 
+    // New spectrum controls
+    const fftSizeSel = $('#fftSize');
+    const winTypeSel = $('#winType');
+
+    
     const timeA = document.getElementById('timeA');
     const timeB = document.getElementById('timeB');
     const spec = document.getElementById('spec');
@@ -375,10 +401,19 @@
       ctx.lineWidth = 1.6; ctx.beginPath();
       let first = true;
       for(let x = padL; x <= W - padR; x++){
-        const frac = (x - padL) / plotW;                   // 0..1
-        const f = Math.pow(10, logLo + frac*(logHi - logLo));
-        const k = Math.min(N2 - 1, Math.max(0, Math.round((f / nyq) * (N2 - 1))));
-        const y = dbToY(magsDB[k]);
+        // Max-hold per pixel: choose the peak bin within this pixel's log-frequency span
+        const fL = Math.pow(10, logLo + ((x - padL - 0.5) / plotW) * (logHi - logLo));
+        const fR = Math.pow(10, logLo + ((x - padL + 0.5) / plotW) * (logHi - logLo));
+        const f0 = Math.max(fmin, Math.min(fL, fR));
+        const f1 = Math.min(fmax, Math.max(fL, fR));
+        let kL = Math.floor((f0 / nyq) * (N2 - 1));
+        let kR = Math.ceil ((f1 / nyq) * (N2 - 1));
+        if (kR < kL) { const tmp = kL; kL = kR; kR = tmp; }
+        kL = Math.max(0, Math.min(N2 - 1, kL));
+        kR = Math.max(0, Math.min(N2 - 1, kR));
+        let peakDB = -300;
+        for (let kk = kL; kk <= kR; kk++) if (magsDB[kk] > peakDB) peakDB = magsDB[kk];
+        const y = dbToY(peakDB);
         const yy = Math.min(H - padB, Math.max(padT, y));
         if(first){ ctx.moveTo(x, yy); first=false; } else { ctx.lineTo(x, yy); }
       }
@@ -438,6 +473,10 @@
     // ===== FFT (iterative radix-2, in-place) =====
     function nextPow2(v){ v--; v|=v>>1; v|=v>>2; v|=v>>4; v|=v>>8; v|=v>>16; v++; return v; }
     function hannWindow(N){ const w = new Float64Array(N); for(let n=0;n<N;n++) w[n] = 0.5*(1 - Math.cos(2*Math.PI*n/(N-1))); return w; }
+    function blackmanWindow(N){ const w=new Float64Array(N); const a0=0.42,a1=0.5,a2=0.08; for(let n=0;n<N;n++){ const phi=2*Math.PI*n/(N-1); w[n]=a0 - a1*Math.cos(phi) + a2*Math.cos(2*phi);} return w; }
+    function blackmanHarrisWindow(N){ const w=new Float64Array(N); const a0=0.35875,a1=0.48829,a2=0.14128,a3=0.01168; for(let n=0;n<N;n++){ const phi=2*Math.PI*n/(N-1); w[n]=a0 - a1*Math.cos(phi) + a2*Math.cos(2*phi) - a3*Math.cos(3*phi);} return w; }
+    function rectWindow(N){ const w=new Float64Array(N); for(let n=0;n<N;n++) w[n]=1; return w; }
+    function makeWindow(type,N){ switch((type||'hann').toLowerCase()){ case 'rect': return rectWindow(N); case 'blackman': return blackmanWindow(N); case 'blackmanharris': return blackmanHarrisWindow(N); case 'hann': default: return hannWindow(N);} }
     function fft(real, imag){
       const n = real.length;
       // bit-reversal
@@ -463,10 +502,10 @@
         }
       }
     }
-    function spectrumDB(signal, sampleRate){
+    function spectrumDB(signal, sampleRate, windowType='hann'){
       const N = nextPow2(signal.length);
       const re = new Float64Array(N); const im = new Float64Array(N);
-      const win = hannWindow(signal.length);
+      const win = makeWindow(windowType, signal.length);
       for(let i=0;i<signal.length;i++) re[i] = signal[i]*win[i];
       for(let i=signal.length;i<N;i++) re[i]=0;
       fft(re, im);
@@ -503,7 +542,7 @@
       // Build buffers: time-domain buffers sized to show N cycles nicely, plus a separate FFT buffer.
       const samplesForCycles = Math.max(256, Math.round(cyc * sampleRate / f));
       const timeLen = clamp(samplesForCycles, 256, 24000);
-      const fftLen = 8192; // independent buffer for spectrum stability
+      const fftLen = parseInt(fftSizeSel.value, 10) || 8192; // independent buffer for spectrum stability
 
       const inputTime = genWave(type, f, A, sampleRate, timeLen);
       const inputFFT = genWave(type, f, A, sampleRate, fftLen);
@@ -527,7 +566,8 @@
       drawSignal(timeA, scale(inputTime), accent);
       drawSignal(timeB, scale(shapedTime), accent2);
 
-      const magsDB = spectrumDB(shapedFFT, sampleRate);
+      const winType = winTypeSel.value;
+      const magsDB = spectrumDB(shapedFFT, sampleRate, winType);
       drawSpectrum(spec, magsDB, sampleRate);
 
       // toggle clip threshold control visibility
@@ -535,7 +575,7 @@
     }
 
     // Wire up events
-    [waveSel,freq,amp,sr,shaperSel,drive,clip,cycles,dbfloor].forEach(el=>{
+    [waveSel,freq,amp,sr,shaperSel,drive,clip,cycles,dbfloor,fftSizeSel,winTypeSel].forEach(el=>{
       el.addEventListener('input', render);
       el.addEventListener('change', render);
     });
@@ -552,21 +592,37 @@
     // ===== Simple self-tests (open console) =====
     function runSelfTests(){
       try{
-        // 1) FFT: spectrumDB length should be N/2 for nextPow2(N)
-        const srTest = 48000, fTest = 1000, lenTest = 5000;
-        const x = genWave('sine', fTest, 0.5, srTest, lenTest);
+        // 1) FFT: argmax near expected bin for 1 kHz @ 48 kHz
+        const srTest = 48000, fTest = 1000, lenTest = 8192;
+        const x = genWave('sine', fTest, 0.8, srTest, lenTest);
         const mags = spectrumDB(x, srTest);
-        console.assert(Number.isInteger(mags.length), 'mags length is integer');
-        console.assert(mags.length > 0, 'mags length > 0');
+        const nyq = srTest*0.5; const N2 = mags.length;
+        const pred = Math.round((fTest/nyq) * (N2-1));
+        let argmax = 0, maxv = -1e9; for(let i=0;i<N2;i++){ if(mags[i]>maxv){ maxv=mags[i]; argmax=i; } }
+        console.assert(Math.abs(argmax - pred) <= 20, `peak bin close (got ${argmax}, want ~${pred})`);
 
-        // 2) Log axis: major ticks monotonic
-        const nyq = srTest*0.5; const fmin=10; const fmax=Math.max(fmin*1.01, nyq);
+        // 2) Log axis: majors monotonic
+        const fmin=10, fmax=Math.max(fmin*1.01, nyq);
         const logLo=Math.log10(fmin), logHi=Math.log10(fmax);
         const logX = (f,W=1200,padL=10,padR=10)=> padL + ((Math.log10(f)-logLo)/(logHi-logLo))*(W-padL-padR);
         const majors=[100,1000,10000,100000].filter(f=>f>=fmin && f<=fmax);
         for(let i=1;i<majors.length;i++){
           console.assert(logX(majors[i])>logX(majors[i-1]), 'logX monotonic for majors');
         }
+
+        // 3) Waveshaper: 'none' is identity
+        const s = new Float64Array([ -0.5, -0.1, 0, 0.2, 0.9 ]);
+        const pass = applyShaper(s, 'none', 1, 1);
+        console.assert(s.every((v,i)=> pass[i]===v), 'none shaper is identity');
+
+        // 4) Hard clip obeys threshold (normalized to [-1,1])
+        const hc = applyShaper(new Float64Array([ -10, -1, -0.25, 0.25, 1, 10 ]), 'hard', 5, 0.5);
+        console.assert(hc.every(v => v>=-1 && v<=1), 'hard clip output within [-1,1]');
+
+        // 5) Window lengths
+        const wH = makeWindow('hann', 16); const wBH = makeWindow('blackmanharris', 16); const wR = makeWindow('rect', 16);
+        console.assert(wH.length===16 && wBH.length===16 && wR.length===16, 'window lengths correct');
+
         console.log('Self-tests passed.');
       }catch(e){ console.error('Self-tests failed:', e); }
     }
