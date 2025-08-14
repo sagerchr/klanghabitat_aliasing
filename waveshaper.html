@@ -318,12 +318,12 @@
       ctx.clearRect(0,0,W,H);
       ctx.fillStyle = panelCol; ctx.fillRect(0,0,W,H);
 
-      // Axis ranges
+      // Axis ranges (fixed frequency domain 10 Hz .. 200 kHz)
       const floor = parseFloat(dbfloor.value);
       const ceil  = 0;
       const nyq   = sampleRate * 0.5;
-      const fmin  = Math.max(10, 1);
-      const fmax  = Math.max(fmin*1.01, nyq);
+      const fmin  = 10;
+      const fmax  = 200000;
       const logLo = Math.log10(fmin);
       const logHi = Math.log10(fmax);
 
@@ -394,6 +394,20 @@
       }
       ctx.restore();
 
+      // Nyquist indicator (red dashed)
+      ctx.save();
+      if(nyq >= fmin && nyq <= fmax){
+        ctx.strokeStyle = '#ff5e5e';
+        ctx.setLineDash([6,4]);
+        ctx.lineWidth = 1.5;
+        const xNyq = Math.round(padL + ((Math.log10(nyq) - logLo) / (logHi - logLo)) * plotW) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(xNyq, padT);
+        ctx.lineTo(xNyq, H - padB);
+        ctx.stroke();
+      }
+      ctx.restore();
+
       // ---- spectrum trace ----
       const N2 = magsDB.length; // bins up to Nyquist
       ctx.save();
@@ -401,20 +415,26 @@
       ctx.lineWidth = 1.6; ctx.beginPath();
       let first = true;
       for(let x = padL; x <= W - padR; x++){
-        // Max-hold per pixel: choose the peak bin within this pixel's log-frequency span
+        // Max-hold per pixel across the pixel's log-frequency span; show floor beyond Nyquist
         const fL = Math.pow(10, logLo + ((x - padL - 0.5) / plotW) * (logHi - logLo));
         const fR = Math.pow(10, logLo + ((x - padL + 0.5) / plotW) * (logHi - logLo));
-        const f0 = Math.max(fmin, Math.min(fL, fR));
-        const f1 = Math.min(fmax, Math.max(fL, fR));
-        let kL = Math.floor((f0 / nyq) * (N2 - 1));
-        let kR = Math.ceil ((f1 / nyq) * (N2 - 1));
-        if (kR < kL) { const tmp = kL; kL = kR; kR = tmp; }
-        kL = Math.max(0, Math.min(N2 - 1, kL));
-        kR = Math.max(0, Math.min(N2 - 1, kR));
-        let peakDB = -300;
-        for (let kk = kL; kk <= kR; kk++) if (magsDB[kk] > peakDB) peakDB = magsDB[kk];
-        const y = dbToY(peakDB);
-        const yy = Math.min(H - padB, Math.max(padT, y));
+        const spanMin = Math.max(fmin, Math.min(fL, fR));
+        const spanMax = Math.min(fmax, Math.max(fL, fR));
+        let peakDB = floor; // default: at/below floor when entirely beyond Nyquist
+        if (spanMin <= nyq) {
+          const lo = spanMin;
+          const hi = Math.min(spanMax, nyq);
+          let kL = Math.floor((lo / nyq) * (N2 - 1));
+          let kR = Math.ceil ((hi / nyq) * (N2 - 1));
+          if (kR < kL) { const tmp = kL; kL = kR; kR = tmp; }
+          kL = Math.max(0, Math.min(N2 - 1, kL));
+          kR = Math.max(0, Math.min(N2 - 1, kR));
+          if (kR >= kL) {
+            peakDB = -300;
+            for (let kk = kL; kk <= kR; kk++) if (magsDB[kk] > peakDB) peakDB = magsDB[kk];
+          }
+        }
+        const yy = Math.min(H - padB, Math.max(padT, dbToY(peakDB)));
         if(first){ ctx.moveTo(x, yy); first=false; } else { ctx.lineTo(x, yy); }
       }
       ctx.stroke();
