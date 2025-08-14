@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Waveshaper • Klanghabitat Educational</title>
+  <style>
+    :root{
+      --bg:#0b0f18;         /* deep blue-black */
+      --panel:#121829;      /* card bg */
+      --ink:#d9e1ff;        /* primary text */
+      --muted:#92a1c6;      /* secondary text */
+      --accent:#44e0ff;     /* cyan accent */
+      --accent-2:#7ef7cf;   /* mint accent */
+      --grid:#23304d;       /* plot grid */
+      --good:#1ee0a1;
+      --warn:#ffb454;
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      background: linear-gradient(180deg, #0b0f18 0%, #0a1020 100%);
+      color:var(--ink);
+      display:flex; flex-direction:column;
+    }
+    header{
+      padding:20px clamp(16px, 3vw, 36px);
+      border-bottom:1px solid #16203a;
+      background: radial-gradient(1200px 240px at 20% -10%, rgba(68,224,255,.15), transparent),
+                  radial-gradient(900px 200px at 80% -10%, rgba(126,247,207,.1), transparent);
+    }
+    header h1{margin:0; font-size:clamp(24px, 2.4vw, 34px); letter-spacing:.3px}
+    header p{margin:.35rem 0 0; color:var(--muted)}
+
+    .app{
+      display:grid; gap:20px; padding:20px clamp(16px, 3vw, 36px);
+      grid-template-columns: 320px 1fr; align-items:start;
+    }
+    @media (max-width: 980px){ .app{ grid-template-columns: 1fr; } }
+
+    .panel{ background:var(--panel); border:1px solid #1a2340; border-radius:16px; box-shadow:0 6px 24px rgba(0,0,0,.35); }
+    .panel h2{ margin:0 0 12px; font-size:16px; font-weight:600; color:#e7edff; letter-spacing:.2px }
+    .panel .body{ padding:16px; }
+
+    .controls .group{ border-top:1px dashed #1e2a49; padding-top:14px; margin-top:14px; }
+    .controls .group:first-child{ border-top:0; padding-top:0; margin-top:0; }
+    .control{ display:grid; grid-template-columns: 1fr auto; align-items:center; gap:12px; margin:10px 0; }
+    .control label{ color:var(--muted); font-size:13px }
+    select, input[type="number"], input[type="text"]{ background:#0f1527; color:var(--ink); border:1px solid #223055; border-radius:10px; padding:10px 12px; font-size:14px; outline:none }
+    select:focus, input:focus{ border-color:var(--accent) }
+    .range{ display:flex; align-items:center; gap:10px }
+    input[type="range"]{ width:100% }
+    .value-badge{
+      font-feature-settings: "tnum" 1;
+      font-variant-numeric: tabular-nums; 
+      background:#0f1527; border:1px solid #223055; color:#cfe0ff; padding:6px 10px; border-radius:10px; font-size:12px; min-width:62px; text-align:center
+    }
+
+    .plots{ display:grid; gap:20px }
+
+    .plot-card{ position:relative; }
+    .plot-card header{ display:flex; justify-content:space-between; align-items:baseline; background:transparent; border:0; padding:14px 16px 0; }
+    .plot-card h3{ margin:0; font-size:15px; color:#e7edff; letter-spacing:.2px }
+    .plot-card .subtitle{ color:var(--muted); font-size:12px }
+    canvas{ width:100%; height:280px; display:block; border-radius:0 0 16px 16px }
+
+    .legend{ display:flex; gap:10px; align-items:center; color:var(--muted); font-size:12px; }
+    .chip{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; background:#0f1527; border:1px solid #223055; border-radius:999px }
+    .chip .swatch{ width:12px; height:12px; border-radius:3px; background:var(--accent) }
+    .chip .swatch.alt{ background:var(--accent-2) }
+
+    footer{ color:#8aa0cc; font-size:12px; text-align:center; padding:20px 16px 40px }
+    footer a{ color:var(--accent); text-decoration:none }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Waveshaper</h1>
+    <p>Create a waveform, pass it through a waveshaper (e.g. <em>tanh</em>), and inspect the resulting waveform and spectrum.</p>
+  </header>
+
+  <main class="app">
+    <!-- Sidebar / Controls -->
+    <section class="panel controls" aria-label="Controls">
+      <div class="body">
+        <h2>Signal</h2>
+        <div class="control">
+          <label for="wave">Waveform</label>
+          <select id="wave" aria-label="Input waveform">
+            <option value="sine">Sine</option>
+            <option value="square">Square</option>
+            <option value="saw">Saw</option>
+            <option value="triangle">Triangle</option>
+          </select>
+        </div>
+        <div class="control">
+          <label for="freq">Frequency</label>
+          <div class="range">
+            <input id="freq" type="range" min="20" max="10000" step="1" value="220" aria-label="Frequency" />
+            <div class="value-badge"><span id="freqVal">220</span> Hz</div>
+          </div>
+        </div>
+        <div class="control">
+          <label for="amp">Amplitude</label>
+          <div class="range">
+            <input id="amp" type="range" min="0.05" max="1.0" step="0.01" value="0.9" aria-label="Amplitude" />
+            <div class="value-badge"><span id="ampVal">0.90</span></div>
+          </div>
+        </div>
+        <div class="control">
+          <label for="sr">Sample rate</label>
+          <div class="range">
+            <input id="sr" type="range" min="8000" max="96000" step="1000" value="48000" aria-label="Sample rate" />
+            <div class="value-badge"><span id="srVal">48.0</span> kHz</div>
+          </div>
+        </div>
+
+        <div class="group">
+          <h2>Waveshaper</h2>
+          <div class="control">
+            <label for="shaper">Type</label>
+            <select id="shaper" aria-label="Waveshaper type">
+              <option value="tanh" selected>tanh (soft saturation)</option>
+              <option value="atan">atan (soft saturation)</option>
+              <option value="cubic">cubic (soft clip)</option>
+              <option value="hard">hard clip</option>
+              <option value="sinefold">sine fold</option>
+              <option value="none">none (bypass)</option>
+            </select>
+          </div>
+          <div class="control">
+            <label for="drive">Drive</label>
+            <div class="range">
+              <input id="drive" type="range" min="0" max="10" step="0.1" value="3" aria-label="Drive" />
+              <div class="value-badge"><span id="driveVal">3.0</span>×</div>
+            </div>
+          </div>
+          <div class="control" id="clipCtl" style="display:none">
+            <label for="clip">Clip threshold</label>
+            <div class="range">
+              <input id="clip" type="range" min="0.2" max="1.0" step="0.01" value="0.8" aria-label="Clip threshold" />
+              <div class="value-badge"><span id="clipVal">0.80</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <h2>Display</h2>
+          <div class="control">
+            <label for="cycles">Cycles shown</label>
+            <div class="range">
+              <input id="cycles" type="range" min="1" max="12" step="1" value="4" aria-label="Cycles shown" />
+              <div class="value-badge"><span id="cyclesVal">4</span></div>
+            </div>
+          </div>
+          <div class="control">
+            <label for="dbfloor">Spectrum floor</label>
+            <div class="range">
+              <input id="dbfloor" type="range" min="-140" max="-20" step="1" value="-110" aria-label="Spectrum floor in dB" />
+              <div class="value-badge"><span id="dbfloorVal">-110</span> dB</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main / Plots -->
+    <section class="plots">
+      <article class="panel plot-card">
+        <header>
+          <h3>Original waveform</h3>
+          <div class="legend"><span class="chip"><span class="swatch"></span> input</span></div>
+        </header>
+        <div class="body" style="padding:0">
+          <canvas id="timeA" width="1200" height="300" aria-label="Original waveform plot"></canvas>
+        </div>
+      </article>
+
+      <article class="panel plot-card">
+        <header>
+          <h3>Waveshaped waveform</h3>
+          <div class="legend"><span class="chip"><span class="swatch alt"></span> output</span></div>
+        </header>
+        <div class="body" style="padding:0">
+          <canvas id="timeB" width="1200" height="300" aria-label="Waveshaped waveform plot"></canvas>
+        </div>
+      </article>
+
+      <article class="panel plot-card">
+        <header>
+          <h3>Spectrum (waveshaped)</h3>
+          <div class="legend"><span class="chip"><span class="swatch"></span> magnitude</span></div>
+        </header>
+        <div class="body" style="padding:0">
+          <canvas id="spec" width="1200" height="320" aria-label="Spectrum plot"></canvas>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer>
+    Built for <strong>Klanghabitat • Educational</strong>. Same look & feel as the aliasing demo, now focusing on waveshaping and harmonic generation.
+  </footer>
+
+  <script>
+    // ===== Utilities =====
+    const $ = (sel) => document.querySelector(sel);
+    const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+    const dB = (x) => 20*Math.log10(x);
+
+    // UI elems
+    const waveSel = $('#wave');
+    const freq = $('#freq'); const freqVal = $('#freqVal');
+    const amp = $('#amp'); const ampVal = $('#ampVal');
+    const sr = $('#sr'); const srVal = $('#srVal');
+
+    const shaperSel = $('#shaper');
+    const drive = $('#drive'); const driveVal = $('#driveVal');
+    const clipCtl = $('#clipCtl');
+    const clip = $('#clip'); const clipVal = $('#clipVal');
+
+    const cycles = $('#cycles'); const cyclesVal = $('#cyclesVal');
+    const dbfloor = $('#dbfloor'); const dbfloorVal = $('#dbfloorVal');
+
+    const timeA = document.getElementById('timeA');
+    const timeB = document.getElementById('timeB');
+    const spec = document.getElementById('spec');
+
+    // Plot drawing helpers
+    function clearPlot(ctx, w, h){
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--panel');
+      ctx.fillRect(0,0,w,h);
+      // grid
+      const grid = getComputedStyle(document.documentElement).getPropertyValue('--grid');
+      ctx.strokeStyle = grid; ctx.lineWidth = 1;
+      ctx.beginPath();
+      const vSteps = 6; const hSteps = 10;
+      for(let i=1;i<vSteps;i++){
+        const y = h*i/vSteps; ctx.moveTo(0,y); ctx.lineTo(w,y);
+      }
+      for(let i=1;i<hSteps;i++){
+        const x = w*i/hSteps; ctx.moveTo(x,0); ctx.lineTo(x,h);
+      }
+      ctx.stroke();
+    }
+    function drawSignal(canvas, data, colorCSS, zeroLine=true){
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      clearPlot(ctx, w, h);
+      // zero line
+      if(zeroLine){
+        ctx.strokeStyle = '#2a3961'; ctx.lineWidth = 1.2; ctx.beginPath();
+        const zy = Math.round(h*0.5)+.5; ctx.moveTo(0,zy); ctx.lineTo(w,zy); ctx.stroke();
+      }
+      // polyline
+      ctx.lineWidth = 2.0; ctx.strokeStyle = colorCSS; ctx.beginPath();
+      const L = data.length; if(L<2) return;
+      for(let i=0;i<L;i++){
+        const x = i/(L-1) * (w-20) + 10; // padding
+        const y = (1 - (data[i]*0.5 + 0.5))*(h-20) + 10; // map [-1,1] to [10,h-10]
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+    function drawSpectrum(canvas, magsDB, sampleRate){
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+
+      // Painting params
+      const panelCol = getComputedStyle(document.documentElement).getPropertyValue('--panel');
+      const gridCol  = getComputedStyle(document.documentElement).getPropertyValue('--grid');
+      const inkCol   = '#9db1de';
+
+      // Layout (leave room at bottom for labels)
+      const padL = 10, padR = 10, padT = 8, padB = 24;
+      const plotW = W - padL - padR;
+      const plotH = H - padT - padB;
+
+      // Clear + background
+      ctx.clearRect(0,0,W,H);
+      ctx.fillStyle = panelCol; ctx.fillRect(0,0,W,H);
+
+      // Axis ranges
+      const floor = parseFloat(dbfloor.value);
+      const ceil  = 0;
+      const nyq   = sampleRate * 0.5;
+      const fmin  = Math.max(10, 1);
+      const fmax  = Math.max(fmin*1.01, nyq);
+      const logLo = Math.log10(fmin);
+      const logHi = Math.log10(fmax);
+
+      // Mappers
+      const logX = (f) => padL + ((Math.log10(f) - logLo) / (logHi - logLo)) * plotW;
+      const dbToY = (d) => padT + (1 - (d - floor) / (ceil - floor)) * plotH;
+
+      // ---- grids ----
+      // Horizontal dB lines (-140..0 dB every 20 dB, clipped to [floor, 0])
+      ctx.save();
+      ctx.strokeStyle = gridCol; ctx.lineWidth = 1; ctx.globalAlpha = 0.6;
+      ctx.beginPath();
+      for(let d=-140; d<=0; d+=20){
+        if(d < floor || d > 0) continue;
+        const y = Math.round(dbToY(d)) + 0.5;
+        ctx.moveTo(padL, y); ctx.lineTo(W - padR, y);
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      // Vertical log lines (minor + major)
+      // Build ticks per decade to avoid manual lists/typos
+      const majors = [100, 1000, 10000, 100000];
+      const majorSet = new Set(majors);
+      const minorTicks = [];
+      const minExp = Math.floor(Math.log10(fmin));
+      const maxExp = Math.ceil(Math.log10(fmax));
+      for(let e=minExp; e<=maxExp; e++){
+        const decade = Math.pow(10, e);
+        for(let m=1; m<10; m++){
+          const f = m * decade;
+          if(f < fmin || f > fmax) continue;
+          if(!majorSet.has(f)) minorTicks.push(f);
+        }
+      }
+
+      // Minor lines
+      ctx.save();
+      ctx.strokeStyle = gridCol; ctx.globalAlpha = 0.35; ctx.lineWidth = 1;
+      ctx.beginPath();
+      for(const f of minorTicks){
+        const x = Math.round(logX(f)) + 0.5;
+        ctx.moveTo(x, padT); ctx.lineTo(x, H - padB);
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      // Major lines (100 Hz, 1 kHz, 10 kHz, 100 kHz if within range)
+      ctx.save();
+      ctx.strokeStyle = gridCol; ctx.globalAlpha = 0.8; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const majorInRange = majors.filter(f => f >= fmin && f <= fmax);
+      for(const f of majorInRange){
+        const x = Math.round(logX(f)) + 0.5;
+        ctx.moveTo(x, padT); ctx.lineTo(x, H - padB);
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      // Major tick labels (below the graph)
+      ctx.save();
+      ctx.fillStyle = inkCol; ctx.font = '12px ui-sans-serif, system-ui';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      for(const f of majorInRange){
+        const x = logX(f);
+        const label = (f >= 1000) ? `${(f/1000).toFixed(0)}k` : `${f}`;
+        ctx.fillText(label, x, H - 6);
+      }
+      ctx.restore();
+
+      // ---- spectrum trace ----
+      const N2 = magsDB.length; // bins up to Nyquist
+      ctx.save();
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent');
+      ctx.lineWidth = 1.6; ctx.beginPath();
+      let first = true;
+      for(let x = padL; x <= W - padR; x++){
+        const frac = (x - padL) / plotW;                   // 0..1
+        const f = Math.pow(10, logLo + frac*(logHi - logLo));
+        const k = Math.min(N2 - 1, Math.max(0, Math.round((f / nyq) * (N2 - 1))));
+        const y = dbToY(magsDB[k]);
+        const yy = Math.min(H - padB, Math.max(padT, y));
+        if(first){ ctx.moveTo(x, yy); first=false; } else { ctx.lineTo(x, yy); }
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // ===== Signal generation =====
+    function genWave(type, freq, amp, sampleRate, length){
+      const out = new Float64Array(length);
+      const w = 2*Math.PI*freq/sampleRate;
+      for(let n=0;n<length;n++){
+        const t = n/sampleRate;
+        switch(type){
+          case 'sine': out[n] = Math.sin(w*n); break;
+          case 'square': out[n] = Math.sign(Math.sin(w*n)); break; // naive (aliased)
+          case 'saw': out[n] = 2*((freq*t)%1) - 1; break;          // naive (aliased)
+          case 'triangle': out[n] = 2/Math.PI * Math.asin(Math.sin(w*n)); break;
+          default: out[n] = Math.sin(w*n);
+        }
+        out[n] *= amp;
+      }
+      return out;
+    }
+
+    // ===== Waveshapers =====
+    function shapeSample(x, type, drive, clipTh){
+      const d = drive;
+      switch(type){
+        case 'tanh':
+          return Math.tanh(d*x) / Math.tanh(Math.max(1e-6, d));
+        case 'atan':
+          return Math.atan(d*x) / Math.atan(Math.max(1e-6, d));
+        case 'cubic':{
+          const y = x*d;
+          const soft = y - (y*y*y)/3;
+          return clamp(soft, -1, 1);
+        }
+        case 'hard':{
+          const y = x*d; const th = Math.max(0.0001, clipTh);
+          return clamp(y, -th, th) / th;
+        }
+        case 'sinefold':{
+          return Math.sin(d*x);
+        }
+        case 'none':
+        default:
+          return x;
+      }
+    }
+    function applyShaper(buf, type, drive, clipTh){
+      const out = new Float64Array(buf.length);
+      for(let i=0;i<buf.length;i++) out[i] = shapeSample(buf[i], type, drive, clipTh);
+      return out;
+    }
+
+    // ===== FFT (iterative radix-2, in-place) =====
+    function nextPow2(v){ v--; v|=v>>1; v|=v>>2; v|=v>>4; v|=v>>8; v|=v>>16; v++; return v; }
+    function hannWindow(N){ const w = new Float64Array(N); for(let n=0;n<N;n++) w[n] = 0.5*(1 - Math.cos(2*Math.PI*n/(N-1))); return w; }
+    function fft(real, imag){
+      const n = real.length;
+      // bit-reversal
+      for(let i=1, j=0;i<n;i++){
+        let bit = n>>1;
+        for(; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if(i<j){ let tr=real[i]; real[i]=real[j]; real[j]=tr; let ti=imag[i]; imag[i]=imag[j]; imag[j]=ti; }
+      }
+      for(let len=2; len<=n; len<<=1){
+        const ang = -2*Math.PI/len;
+        const wlenCos = Math.cos(ang), wlenSin = Math.sin(ang);
+        for(let i=0; i<n; i+=len){
+          let wcos=1, wsin=0;
+          for(let j=0; j<(len>>1); j++){
+            const uRe = real[i+j], uIm = imag[i+j];
+            const vRe = real[i+j+(len>>1)]*wcos - imag[i+j+(len>>1)]*wsin;
+            const vIm = real[i+j+(len>>1)]*wsin + imag[i+j+(len>>1)]*wcos;
+            real[i+j] = uRe + vRe; imag[i+j] = uIm + vIm;
+            real[i+j+(len>>1)] = uRe - vRe; imag[i+j+(len>>1)] = uIm - vIm;
+            const nwcos = wcos*wlenCos - wsin*wlenSin; const nwsin = wcos*wlenSin + wsin*wlenCos; wcos=nwcos; wsin=nwsin;
+          }
+        }
+      }
+    }
+    function spectrumDB(signal, sampleRate){
+      const N = nextPow2(signal.length);
+      const re = new Float64Array(N); const im = new Float64Array(N);
+      const win = hannWindow(signal.length);
+      for(let i=0;i<signal.length;i++) re[i] = signal[i]*win[i];
+      for(let i=signal.length;i<N;i++) re[i]=0;
+      fft(re, im);
+      const n2 = N>>1; const mags = new Float64Array(n2);
+      let maxMag = 1e-12;
+      for(let k=0;k<n2;k++){
+        const m = Math.hypot(re[k], im[k])/(N/2);
+        mags[k] = m; if(m>maxMag) maxMag=m;
+      }
+      const magsDB = new Float64Array(n2);
+      for(let k=0;k<n2;k++) magsDB[k] = clamp(dB(mags[k]/maxMag), -300, 0); // normalize to 0 dB peak
+      return magsDB;
+    }
+
+    // ===== Controller =====
+    function updateLabels(){
+      freqVal.textContent = parseInt(freq.value,10);
+      ampVal.textContent = parseFloat(amp.value).toFixed(2);
+      srVal.textContent = (parseInt(sr.value,10)/1000).toFixed(1);
+      driveVal.textContent = parseFloat(drive.value).toFixed(1);
+      clipVal.textContent = parseFloat(clip.value).toFixed(2);
+      cyclesVal.textContent = parseInt(cycles.value,10);
+      dbfloorVal.textContent = parseInt(dbfloor.value,10);
+    }
+
+    function render(){
+      updateLabels();
+      const sampleRate = parseInt(sr.value,10);
+      const f = parseFloat(freq.value);
+      const A = parseFloat(amp.value);
+      const cyc = parseInt(cycles.value,10);
+      const type = waveSel.value;
+
+      // Build buffers: time-domain buffers sized to show N cycles nicely, plus a separate FFT buffer.
+      const samplesForCycles = Math.max(256, Math.round(cyc * sampleRate / f));
+      const timeLen = clamp(samplesForCycles, 256, 24000);
+      const fftLen = 8192; // independent buffer for spectrum stability
+
+      const inputTime = genWave(type, f, A, sampleRate, timeLen);
+      const inputFFT = genWave(type, f, A, sampleRate, fftLen);
+
+      const sh = shaperSel.value;
+      const drv = parseFloat(drive.value);
+      const th = parseFloat(clip.value);
+
+      const shapedTime = applyShaper(inputTime, sh, drv, th);
+      const shapedFFT = applyShaper(inputFFT, sh, drv, th);
+
+      // Normalize plotting to [-1,1] safely (non-destructive visual scaling)
+      const scale = (arr)=>{
+        let m = 0; for(let i=0;i<arr.length;i++) m = Math.max(m, Math.abs(arr[i]));
+        const s = m>1 ? 1/m : 1; const out = new Float64Array(arr.length);
+        for(let i=0;i<arr.length;i++) out[i]=arr[i]*s; return out;
+      }
+
+      const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent');
+      const accent2 = getComputedStyle(document.documentElement).getPropertyValue('--accent-2');
+      drawSignal(timeA, scale(inputTime), accent);
+      drawSignal(timeB, scale(shapedTime), accent2);
+
+      const magsDB = spectrumDB(shapedFFT, sampleRate);
+      drawSpectrum(spec, magsDB, sampleRate);
+
+      // toggle clip threshold control visibility
+      clipCtl.style.display = (sh === 'hard') ? 'grid' : 'none';
+    }
+
+    // Wire up events
+    [waveSel,freq,amp,sr,shaperSel,drive,clip,cycles,dbfloor].forEach(el=>{
+      el.addEventListener('input', render);
+      el.addEventListener('change', render);
+    });
+
+    // Hi-DPI canvas scaling
+    function scaleCanvas(canvas){
+      const ratio = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth * ratio; const h = canvas.clientHeight * ratio;
+      if(canvas.width !== w || canvas.height !== h){ canvas.width = w; canvas.height = h; }
+    }
+    function resize(){ [timeA,timeB,spec].forEach(c=>scaleCanvas(c)); render(); }
+    window.addEventListener('resize', resize);
+
+    // ===== Simple self-tests (open console) =====
+    function runSelfTests(){
+      try{
+        // 1) FFT: spectrumDB length should be N/2 for nextPow2(N)
+        const srTest = 48000, fTest = 1000, lenTest = 5000;
+        const x = genWave('sine', fTest, 0.5, srTest, lenTest);
+        const mags = spectrumDB(x, srTest);
+        console.assert(Number.isInteger(mags.length), 'mags length is integer');
+        console.assert(mags.length > 0, 'mags length > 0');
+
+        // 2) Log axis: major ticks monotonic
+        const nyq = srTest*0.5; const fmin=10; const fmax=Math.max(fmin*1.01, nyq);
+        const logLo=Math.log10(fmin), logHi=Math.log10(fmax);
+        const logX = (f,W=1200,padL=10,padR=10)=> padL + ((Math.log10(f)-logLo)/(logHi-logLo))*(W-padL-padR);
+        const majors=[100,1000,10000,100000].filter(f=>f>=fmin && f<=fmax);
+        for(let i=1;i<majors.length;i++){
+          console.assert(logX(majors[i])>logX(majors[i-1]), 'logX monotonic for majors');
+        }
+        console.log('Self-tests passed.');
+      }catch(e){ console.error('Self-tests failed:', e); }
+    }
+
+    // boot
+    resize();
+    runSelfTests();
+  </script>
+</body>
+</html>
