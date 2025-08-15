@@ -92,10 +92,15 @@
     width:100%;
   }
   select:focus{ border-color: var(--accent); box-shadow: 0 0 0 3px rgba(68,224,255,.18); }
-
-  .range{ display:flex; align-items:center; gap:10px }
-  input[type="range"]{width: 100%; height: 40px;}
   
+   .range{ display:flex; align-items:center; gap:10px }
+    input[type="range"]{ width:100% }
+    .value-badge{
+      font-feature-settings: "tnum" 1;
+      font-variant-numeric: tabular-nums; 
+      background:#0f1527; border:1px solid #223055; color:#cfe0ff; padding:6px 10px; border-radius:10px; font-size:12px; min-width:62px; text-align:center
+    }
+	
   .hint { font-size: 11px; color: var(--muted); }
   
    footer{ color:#8aa0cc; font-size:12px; text-align:center; padding:20px 16px 40px }
