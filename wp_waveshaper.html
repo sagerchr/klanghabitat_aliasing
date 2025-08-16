@@ -1,0 +1,360 @@
+<!-- Waveshaper • Elementor embed-ready snippet (self-contained) -->
+<style>
+  /* === Scoped theme tokens (apply only inside .kh-waveshaper) === */
+  .kh-waveshaper{ --bg:#0b0f18; --panel:#121829; --ink:#d9e1ff; --muted:#92a1c6; --accent:#44e0ff; --accent-2:#7ef7cf; --grid:#23304d; --good:#1ee0a1; --warn:#ffb454; --hair:#223055; }
+  .kh-waveshaper{ color:var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; }
+  .kh-waveshaper *{ box-sizing:border-box }
+
+  /* Header */
+  .kh-waveshaper .kh-head{ padding:16px clamp(12px, 3vw, 28px); border:1px solid #16203a; border-radius:14px; background: radial-gradient(1200px 240px at 20% -10%, rgba(68,224,255,.12), transparent), radial-gradient(900px 200px at 80% -10%, rgba(126,247,207,.08), transparent); margin-bottom:14px }
+  .kh-waveshaper .kh-head h2{ margin:0; font-size:clamp(18px,2.2vw,28px) }
+  .kh-waveshaper .kh-head p{ margin:.35rem 0 0; color:var(--muted); font-size:14px }
+
+  /* Layout */
+  .kh-waveshaper .kh-grid{ display:grid; gap:20px; grid-template-columns: 1fr 320px; grid-template-areas: "plots controls"; align-items:start }
+  @media (max-width: 980px){ .kh-waveshaper .kh-grid{ grid-template-columns:1fr; grid-template-areas: "controls" "plots" } }
+
+  /* Cards */
+  .kh-waveshaper .kh-card{ background: var(--panel); border: 1px solid #1a2340; border-radius: 16px; box-shadow: 0 6px 24px rgba(0,0,0,.35); margin: 0; padding: 6px }
+  .kh-waveshaper .kh-card h3{ margin: 6px 8px 10px; font-size: 14px; font-weight: 600; color:#e7edff; letter-spacing:.2px }
+
+  .kh-waveshaper .kh-plots{ grid-area:plots; display:grid; gap:20px }
+  .kh-waveshaper .kh-controls{ grid-area:controls; position: sticky; top: 8px }
+
+  /* Controls */
+  .kh-waveshaper label{ font-size: 13px; color: var(--muted); display:block; margin: 8px 0 6px }
+  .kh-waveshaper .kh-row{ margin-bottom: 14px }
+  .kh-waveshaper select{
+    appearance:none; -webkit-appearance:none; -moz-appearance:none; width:100%;
+    background:#0f1527 url("data:image/svg+xml;utf8,<svg fill='%23cfe0ff' height='14' viewBox='0 0 20 20' width='14' xmlns='http://www.w3.org/2000/svg'><path d='M5.25 7.5l4.75 4.75 4.75-4.75' /></svg>") no-repeat right 12px center; background-size:14px 14px;
+    color:var(--ink); border:1px solid var(--hair); border-radius:10px; padding:10px 38px 10px 12px; font-size:14px; outline:none;
+  }
+  .kh-waveshaper select:focus{ border-color: var(--accent); box-shadow: 0 0 0 3px rgba(68,224,255,.18) }
+  .kh-waveshaper .kh-range{ display:flex; align-items:center; gap:10px }
+  .kh-waveshaper input[type=range]{ width:100% }
+  .kh-waveshaper .kh-badge{ font-feature-settings:"tnum" 1; font-variant-numeric:tabular-nums; background:#0f1527; border:1px solid #223055; color:#cfe0ff; padding:6px 10px; border-radius:10px; font-size:12px; min-width:62px; text-align:center }
+  .kh-waveshaper .kh-hint{ font-size:11px; color:var(--muted) }
+
+  /* Legend chips */
+  .kh-waveshaper .kh-legend{ display:flex; gap:10px; align-items:center; color:var(--muted); font-size:12px; padding: 0 8px 6px }
+  .kh-waveshaper .kh-chip{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; background:#0f1527; border:1px solid #223055; border-radius:999px }
+  .kh-waveshaper .kh-chip .sw{ width:12px; height:12px; border-radius:3px; background:var(--accent) }
+  .kh-waveshaper .kh-chip .sw.alt{ background:var(--accent-2) }
+  .kh-waveshaper .kh-chip .sw.warn{ background:var(--warn) }
+
+  /* Canvases */
+  .kh-waveshaper canvas{ width:100%; height: 220px; display:block; border-radius:10px; background:black }
+</style>
+
+<div class="kh-waveshaper">
+  <div class="kh-head">
+    <h2>Waveshaper</h2>
+    <p>Create a waveform, pass it through a waveshaper (e.g. <em>tanh</em>), and inspect the resulting waveform & spectrum.</p>
+  </div>
+
+  <div class="kh-grid">
+    <div class="kh-plots">
+      <div class="kh-card">
+        <h3>Original waveform</h3>
+        <div class="kh-legend"><span class="kh-chip"><span class="sw"></span> input</span></div>
+        <canvas data-kh-canvas="timeA"></canvas>
+      </div>
+      <div class="kh-card">
+        <h3>Waveshaped waveform</h3>
+        <div class="kh-legend"><span class="kh-chip"><span class="sw alt"></span> output</span></div>
+        <canvas data-kh-canvas="timeB"></canvas>
+      </div>
+      <div class="kh-card">
+        <h3>Spectrum (waveshaped)</h3>
+        <div class="kh-legend">
+          <span class="kh-chip"><span class="sw"></span> magnitude</span>
+          <span class="kh-chip"><span class="sw warn"></span> ideal > Nyquist</span>
+        </div>
+        <canvas data-kh-canvas="spec"></canvas>
+      </div>
+    </div>
+
+    <div class="kh-card kh-controls">
+      <h3>Controls</h3>
+      <div class="kh-row">
+        <label>Waveform</label>
+        <select data-kh="wave">
+          <option value="sine">Sine</option>
+          <option value="square">Square</option>
+          <option value="saw">Saw</option>
+          <option value="triangle">Triangle</option>
+        </select>
+      </div>
+
+      <div class="kh-row">
+        <label>Frequency</label>
+        <div class="kh-range">
+          <input data-kh="freq" type="range" min="20" max="10000" step="1" value="220" />
+          <div class="kh-badge"><span data-kh="freqVal">220</span> Hz</div>
+        </div>
+      </div>
+
+      <div class="kh-row">
+        <label>Amplitude</label>
+        <div class="kh-range">
+          <input data-kh="amp" type="range" min="0.05" max="1.0" step="0.01" value="0.9" />
+          <div class="kh-badge"><span data-kh="ampVal">0.90</span></div>
+        </div>
+      </div>
+
+      <div class="kh-row">
+        <label>Sample rate</label>
+        <div class="kh-range">
+          <input data-kh="sr" type="range" min="8000" max="96000" step="1000" value="48000" />
+          <div class="kh-badge"><span data-kh="srVal">48.0</span> kHz</div>
+        </div>
+      </div>
+
+      <div class="kh-row">
+        <label>Waveshaper</label>
+        <select data-kh="shaper">
+          <option value="tanh" selected>tanh (soft saturation)</option>
+          <option value="atan">atan (soft saturation)</option>
+          <option value="cubic">cubic (soft clip)</option>
+          <option value="hard">hard clip</option>
+          <option value="sinefold">sine fold</option>
+          <option value="none">none (bypass)</option>
+        </select>
+      </div>
+
+      <div class="kh-row">
+        <label>Drive</label>
+        <div class="kh-range">
+          <input data-kh="drive" type="range" min="0" max="10" step="0.1" value="3" />
+          <div class="kh-badge"><span data-kh="driveVal">3.0</span>×</div>
+        </div>
+      </div>
+
+      <div class="kh-row" data-kh="clipCtl" style="display:none">
+        <label>Clip threshold</label>
+        <div class="kh-range">
+          <input data-kh="clip" type="range" min="0.2" max="1.0" step="0.01" value="0.8" />
+          <div class="kh-badge"><span data-kh="clipVal">0.80</span></div>
+        </div>
+      </div>
+
+      <div class="kh-row">
+        <label>Cycles shown</label>
+        <div class="kh-range">
+          <input data-kh="cycles" type="range" min="1" max="12" step="1" value="4" />
+          <div class="kh-badge"><span data-kh="cyclesVal">4</span></div>
+        </div>
+      </div>
+
+      <div class="kh-row">
+        <label>Spectrum floor</label>
+        <div class="kh-range">
+          <input data-kh="dbfloor" type="range" min="-140" max="-20" step="1" value="-110" />
+          <div class="kh-badge"><span data-kh="dbfloorVal">-110</span> dB</div>
+        </div>
+      </div>
+
+      <div class="kh-row">
+        <label>FFT size</label>
+        <select data-kh="fftSize">
+          <option value="2048">2048</option>
+          <option value="4096">4096</option>
+          <option value="8192" selected>8192</option>
+          <option value="16384">16384</option>
+          <option value="32768">32768</option>
+        </select>
+      </div>
+
+      <div class="kh-row">
+        <label>Window</label>
+        <select data-kh="winType">
+          <option value="hann" selected>Hann</option>
+          <option value="blackmanharris">Blackman–Harris</option>
+          <option value="blackman">Blackman</option>
+          <option value="rect">Rectangular</option>
+        </select>
+      </div>
+
+      <div class="kh-row kh-hint">Spectrum domain is fixed to 10 Hz → 200 kHz. Red dashed line marks Nyquist. Orange overlay shows ideal > Nyquist extension.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  function init(root){
+    if(!root) return;
+  // ===== Utilities =====
+  const qs = (s) => root.querySelector(s);
+  const qsa = (s) => Array.from(root.querySelectorAll(s));
+  const clamp = (v,a,b)=> Math.min(b, Math.max(a,v));
+  const dB = (x)=> 20*Math.log10(x);
+  const css = getComputedStyle(root);
+
+  // UI elements
+  const els = {
+    wave: qs('[data-kh="wave"]'),
+    freq: qs('[data-kh="freq"]'), freqVal: qs('[data-kh="freqVal"]'),
+    amp: qs('[data-kh="amp"]'), ampVal: qs('[data-kh="ampVal"]'),
+    sr: qs('[data-kh="sr"]'), srVal: qs('[data-kh="srVal"]'),
+    shaper: qs('[data-kh="shaper"]'),
+    drive: qs('[data-kh="drive"]'), driveVal: qs('[data-kh="driveVal"]'),
+    clipCtl: qs('[data-kh="clipCtl"]'),
+    clip: qs('[data-kh="clip"]'), clipVal: qs('[data-kh="clipVal"]'),
+    cycles: qs('[data-kh="cycles"]'), cyclesVal: qs('[data-kh="cyclesVal"]'),
+    dbfloor: qs('[data-kh="dbfloor"]'), dbfloorVal: qs('[data-kh="dbfloorVal"]'),
+    fftSize: qs('[data-kh="fftSize"]'), winType: qs('[data-kh="winType"]'),
+    timeA: qs('canvas[data-kh-canvas="timeA"]'),
+    timeB: qs('canvas[data-kh-canvas="timeB"]'),
+    spec:  qs('canvas[data-kh-canvas="spec"]'),
+  };
+
+  // Plot helpers
+  function clearPlot(ctx,w,h){
+    ctx.fillStyle = css.getPropertyValue('--panel');
+    ctx.fillRect(0,0,w,h);
+    const grid = css.getPropertyValue('--grid');
+    ctx.strokeStyle = grid; ctx.lineWidth = 1; ctx.beginPath();
+    const vSteps=6, hSteps=10;
+    for(let i=1;i<vSteps;i++){ const y=h*i/vSteps; ctx.moveTo(0,y); ctx.lineTo(w,y); }
+    for(let i=1;i<hSteps;i++){ const x=w*i/hSteps; ctx.moveTo(x,0); ctx.lineTo(x,h); }
+    ctx.stroke();
+  }
+  function drawSignal(canvas, data, colorCSS, zeroLine=true){
+    const ctx = canvas.getContext('2d'); const w=canvas.width, h=canvas.height;
+    clearPlot(ctx,w,h);
+    if(zeroLine){ ctx.strokeStyle = '#2a3961'; ctx.lineWidth=1.2; ctx.beginPath(); const zy=Math.round(h*0.5)+.5; ctx.moveTo(0,zy); ctx.lineTo(w,zy); ctx.stroke(); }
+    ctx.lineWidth=2.0; ctx.strokeStyle=colorCSS; ctx.beginPath();
+    for(let i=0;i<data.length;i++){
+      const x = i/(data.length-1) * (w-20) + 10;
+      const y = (1 - (data[i]*0.5 + 0.5))*(h-20) + 10;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+
+  // ===== Log-spectrum drawing (fixed 10..200 kHz, Nyquist line, max-hold per pixel, ideal overlay) =====
+  function drawSpectrum(canvas, magsDB, sampleRate, ideal){
+    const ctx = canvas.getContext('2d'); const W=canvas.width, H=canvas.height;
+
+    const panelCol = css.getPropertyValue('--panel');
+    const gridCol  = css.getPropertyValue('--grid');
+    const inkCol   = '#9db1de';
+
+    const padL=10, padR=10, padT=8, padB=24; const plotW=W-padL-padR, plotH=H-padT-padB;
+    ctx.clearRect(0,0,W,H); ctx.fillStyle=panelCol; ctx.fillRect(0,0,W,H);
+
+    const floor = parseFloat(els.dbfloor.value); const ceil = 0; const nyq = sampleRate*0.5; const fmin=10; const fmax=200000; const logLo=Math.log10(fmin); const logHi=Math.log10(fmax);
+    const logX = (f)=> padL + ((Math.log10(f) - logLo)/(logHi-logLo))*plotW;
+    const dbToY = (d)=> padT + (1 - (d - floor)/(ceil - floor)) * plotH;
+
+    // dB grid
+    ctx.save(); ctx.strokeStyle=gridCol; ctx.lineWidth=1; ctx.globalAlpha=.6; ctx.beginPath();
+    for(let d=-140; d<=0; d+=20){ if(d<floor||d>0) continue; const y=Math.round(dbToY(d))+.5; ctx.moveTo(padL,y); ctx.lineTo(W-padR,y); }
+    ctx.stroke(); ctx.restore();
+
+    // Log freq grid (minor per-decade, major at 100/1k/10k/100k)
+    const majors=[100,1000,10000,100000]; const minor=[]; const minExp=Math.floor(Math.log10(fmin)); const maxExp=Math.ceil(Math.log10(fmax));
+    for(let e=minExp;e<=maxExp;e++){ const dec=Math.pow(10,e); for(let m=1;m<10;m++){ const f=m*dec; if(f>=fmin&&f<=fmax && !majors.includes(f)) minor.push(f); } }
+
+    ctx.save(); ctx.strokeStyle=gridCol; ctx.globalAlpha=.35; ctx.lineWidth=1; ctx.beginPath();
+    for(const f of minor){ const x=Math.round(logX(f))+.5; ctx.moveTo(x,padT); ctx.lineTo(x,H-padB); }
+    ctx.stroke(); ctx.restore();
+
+    ctx.save(); ctx.strokeStyle=gridCol; ctx.globalAlpha=.8; ctx.lineWidth=1.5; ctx.beginPath();
+    for(const f of majors){ if(f<fmin||f>fmax) continue; const x=Math.round(logX(f))+.5; ctx.moveTo(x,padT); ctx.lineTo(x,H-padB); }
+    ctx.stroke(); ctx.restore();
+
+    // Nyquist dashed line
+    if(nyq>=fmin && nyq<=fmax){ ctx.save(); ctx.strokeStyle = '#ff5e5e'; ctx.setLineDash([6,4]); ctx.lineWidth=1.5; const xN=Math.round(logX(nyq))+.5; ctx.beginPath(); ctx.moveTo(xN,padT); ctx.lineTo(xN,H-padB); ctx.stroke(); ctx.restore(); }
+
+    // Main spectrum (cyan), max-hold per pixel below Nyquist
+    const N2=magsDB.length; ctx.save(); ctx.strokeStyle=css.getPropertyValue('--accent'); ctx.lineWidth=1.6; ctx.beginPath(); let first=true;
+    for(let x=padL; x<=W-padR; x++){
+      const fL=Math.pow(10, logLo + ((x - padL - .5)/plotW)*(logHi-logLo));
+      const fR=Math.pow(10, logLo + ((x - padL + .5)/plotW)*(logHi-logLo));
+      const spanMin=Math.max(fmin, Math.min(fL,fR)); const spanMax=Math.min(fmax, Math.max(fL,fR));
+      let peakDB=floor; // default beyond Nyquist
+      if(spanMin<=nyq){ const lo=spanMin; const hi=Math.min(spanMax, nyq); let kL=Math.floor((lo/nyq)*(N2-1)); let kR=Math.ceil((hi/nyq)*(N2-1)); if(kR<kL){const t=kL;kL=kR;kR=t;} kL=Math.max(0,Math.min(N2-1,kL)); kR=Math.max(0,Math.min(N2-1,kR)); if(kR>=kL){ peakDB=-300; for(let kk=kL; kk<=kR; kk++){ if(magsDB[kk]>peakDB) peakDB=magsDB[kk]; } } }
+      const yy = Math.min(H-padB, Math.max(padT, dbToY(peakDB)));
+      if(first){ ctx.moveTo(x,yy); first=false; } else { ctx.lineTo(x,yy); }
+    }
+    ctx.stroke(); ctx.restore();
+
+    // Ideal overlay beyond Nyquist (orange), from oversampled analysis
+    if(ideal && ideal.magsDB && ideal.magsDB.length>1){ const magsHi=ideal.magsDB; const hiSR=ideal.sampleRate; const hiNyq=hiSR*.5; const N2h=magsHi.length; ctx.save(); ctx.strokeStyle=css.getPropertyValue('--warn'); ctx.lineWidth=1.2; ctx.beginPath(); let started=false; for(let x=padL; x<=W-padR; x++){ const fL=Math.pow(10, logLo + ((x - padL - .5)/plotW)*(logHi-logLo)); const fR=Math.pow(10, logLo + ((x - padL + .5)/plotW)*(logHi-logLo)); const lo=Math.max(nyq, Math.min(fL,fR)); const hi=Math.min(hiNyq, Math.max(fL,fR)); if(hi<=lo){ started=false; continue; } let kL=Math.floor((lo/hiNyq)*(N2h-1)); let kR=Math.ceil((hi/hiNyq)*(N2h-1)); if(kR<kL){const t=kL;kL=kR;kR=t;} kL=Math.max(0,Math.min(N2h-1,kL)); kR=Math.max(0,Math.min(N2h-1,kR)); let peak=-300; for(let kk=kL; kk<=kR; kk++){ if(magsHi[kk]>peak) peak=magsHi[kk]; } const yy=Math.min(H-padB, Math.max(padT, dbToY(peak))); if(!started){ ctx.moveTo(x,yy); started=true; } else { ctx.lineTo(x,yy); } } ctx.stroke(); ctx.restore(); }
+
+    // Labels (major freq bottom)
+    ctx.fillStyle=inkCol; ctx.font='12px ui-sans-serif, system-ui'; ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+    for(const f of majors){ if(f<fmin||f>fmax) continue; const x=logX(f); const label=(f>=1000? (f/1000).toFixed(0)+'k' : ''+f); ctx.fillText(label, x, H-6); }
+  }
+
+  // ===== Signal & shaping =====
+  function genWave(type, freq, amp, sampleRate, length){
+    const out = new Float64Array(length); const w = 2*Math.PI*freq/sampleRate; for(let n=0;n<length;n++){ const t=n/sampleRate; let v=0; switch(type){ case 'sine': v=Math.sin(w*n); break; case 'square': v=Math.sign(Math.sin(w*n)); break; case 'saw': v=2*((freq*t)%1)-1; break; case 'triangle': v=2/Math.PI*Math.asin(Math.sin(w*n)); break; default: v=Math.sin(w*n);} out[n]=amp*v; } return out;
+  }
+  function shapeSample(x,type,drive,clipTh){ const d=drive; switch(type){ case 'tanh': return Math.tanh(d*x)/Math.tanh(Math.max(1e-6,d)); case 'atan': return Math.atan(d*x)/Math.atan(Math.max(1e-6,d)); case 'cubic':{ const y=x*d; const soft=y-(y*y*y)/3; return clamp(soft,-1,1);} case 'hard':{ const y=x*d; const th=Math.max(0.0001,clipTh); return clamp(y,-th,th)/th;} case 'sinefold': return Math.sin(d*x); case 'none': default: return x; } }
+  function applyShaper(buf,type,drive,clipTh){ const out=new Float64Array(buf.length); for(let i=0;i<buf.length;i++) out[i]=shapeSample(buf[i],type,drive,clipTh); return out; }
+
+  // ===== FFT =====
+  function nextPow2(v){ v--; v|=v>>1; v|=v>>2; v|=v>>4; v|=v>>8; v|=v>>16; v++; return v; }
+  function hannWindow(N){ const w=new Float64Array(N); for(let n=0;n<N;n++) w[n]=0.5*(1-Math.cos(2*Math.PI*n/(N-1))); return w; }
+  function blackmanWindow(N){ const w=new Float64Array(N); const a0=0.42,a1=0.5,a2=0.08; for(let n=0;n<N;n++){ const ph=2*Math.PI*n/(N-1); w[n]=a0 - a1*Math.cos(ph) + a2*Math.cos(2*ph);} return w; }
+  function blackmanHarrisWindow(N){ const w=new Float64Array(N); const a0=0.35875,a1=0.48829,a2=0.14128,a3=0.01168; for(let n=0;n<N;n++){ const ph=2*Math.PI*n/(N-1); w[n]=a0 - a1*Math.cos(ph) + a2*Math.cos(2*ph) - a3*Math.cos(3*ph);} return w; }
+  function rectWindow(N){ const w=new Float64Array(N); for(let n=0;n<N;n++) w[n]=1; return w; }
+  function makeWindow(type,N){ switch((type||'hann').toLowerCase()){ case 'rect': return rectWindow(N); case 'blackman': return blackmanWindow(N); case 'blackmanharris': return blackmanHarrisWindow(N); default: return hannWindow(N);} }
+  function fft(real, imag){ const n=real.length; for(let i=1,j=0;i<n;i++){ let bit=n>>1; for(; j & bit; bit>>=1) j^=bit; j^=bit; if(i<j){ let tr=real[i]; real[i]=real[j]; real[j]=tr; let ti=imag[i]; imag[i]=imag[j]; imag[j]=ti; } } for(let len=2; len<=n; len<<=1){ const ang=-2*Math.PI/len; const wlenCos=Math.cos(ang), wlenSin=Math.sin(ang); for(let i=0;i<n;i+=len){ let wcos=1, wsin=0; for(let j=0;j<(len>>1); j++){ const uRe=real[i+j], uIm=imag[i+j]; const vRe=real[i+j+(len>>1)]*wcos - imag[i+j+(len>>1)]*wsin; const vIm=real[i+j+(len>>1)]*wsin + imag[i+j+(len>>1)]*wcos; real[i+j]=uRe+vRe; imag[i+j]=uIm+vIm; real[i+j+(len>>1)]=uRe-vRe; imag[i+j+(len>>1)]=uIm-vIm; const nwcos=wcos*wlenCos - wsin*wlenSin; const nwsin=wcos*wlenSin + wsin*wlenCos; wcos=nwcos; wsin=nwsin; } } } }
+  function spectrumDB(signal, sampleRate, windowType='hann'){
+    const N=nextPow2(signal.length); const re=new Float64Array(N), im=new Float64Array(N);
+    const win=makeWindow(windowType, signal.length); for(let i=0;i<signal.length;i++) re[i]=signal[i]*win[i]; for(let i=signal.length;i<N;i++) re[i]=0; fft(re,im);
+    const n2=N>>1; const mags=new Float64Array(n2); let maxMag=1e-12; for(let k=0;k<n2;k++){ const m=Math.hypot(re[k], im[k])/(N/2); mags[k]=m; if(m>maxMag) maxMag=m; }
+    const magsDB=new Float64Array(n2); for(let k=0;k<n2;k++) magsDB[k]=clamp(dB(mags[k]/maxMag), -300, 0); return magsDB;
+  }
+  function computeIdealOverlay(sampleRate, fftLen, type, f, A, sh, drv, th, winType){
+    const targetFmax=200000; const neededOSR=Math.ceil((targetFmax*2)/sampleRate); const OSR=Math.max(2, Math.min(16, neededOSR));
+    const hiSR=sampleRate*OSR; const MAX_HI_LEN=262144; const hiLen=Math.min(MAX_HI_LEN, Math.max(2048, fftLen*OSR));
+    const inHi=genWave(type, f, A, hiSR, hiLen); const shapedHi=applyShaper(inHi, sh, drv, th); const magsDBHi=spectrumDB(shapedHi, hiSR, winType);
+    return { magsDB:magsDBHi, sampleRate: hiSR };
+  }
+
+  // ===== Controller =====
+  function updateLabels(){ els.freqVal.textContent = parseInt(els.freq.value,10); els.ampVal.textContent = parseFloat(els.amp.value).toFixed(2); els.srVal.textContent=(parseInt(els.sr.value,10)/1000).toFixed(1); els.driveVal.textContent=parseFloat(els.drive.value).toFixed(1); els.clipVal.textContent=parseFloat(els.clip.value).toFixed(2); els.cyclesVal.textContent=parseInt(els.cycles.value,10); els.dbfloorVal.textContent=parseInt(els.dbfloor.value,10); }
+
+  function render(){
+    updateLabels();
+    const sampleRate = parseInt(els.sr.value,10); const f = parseFloat(els.freq.value); const A = parseFloat(els.amp.value); const cyc = parseInt(els.cycles.value,10); const type = els.wave.value;
+    const timeLen = clamp(Math.max(256, Math.round(cyc * sampleRate / Math.max(f,1))), 256, 24000);
+    const fftLen = parseInt(els.fftSize.value,10) || 8192; const winType = els.winType.value;
+
+    const inputTime = genWave(type, f, A, sampleRate, timeLen); const inputFFT = genWave(type, f, A, sampleRate, fftLen);
+    const sh = els.shaper.value; const drv = parseFloat(els.drive.value); const th = parseFloat(els.clip.value);
+    const shapedTime = applyShaper(inputTime, sh, drv, th); const shapedFFT = applyShaper(inputFFT, sh, drv, th);
+
+    const scale = (arr)=>{ let m=0; for(let i=0;i<arr.length;i++) m=Math.max(m, Math.abs(arr[i])); const s=m>1?1/m:1; const out=new Float64Array(arr.length); for(let i=0;i<arr.length;i++) out[i]=arr[i]*s; return out; };
+    const accent = css.getPropertyValue('--accent'); const accent2 = css.getPropertyValue('--accent-2');
+
+    drawSignal(els.timeA, scale(inputTime), accent); drawSignal(els.timeB, scale(shapedTime), accent2);
+    const magsDB = spectrumDB(shapedFFT, sampleRate, winType); const ideal = computeIdealOverlay(sampleRate, fftLen, type, f, A, sh, drv, th, winType);
+    drawSpectrum(els.spec, magsDB, sampleRate, ideal);
+
+    els.clipCtl.style.display = (sh === 'hard') ? '' : 'none';
+  }
+
+  function scaleCanvas(canvas){ const ratio = window.devicePixelRatio || 1; const w = Math.round((canvas.clientWidth||canvas.width) * ratio); const h = Math.round((canvas.clientHeight||canvas.height) * ratio); if(canvas.width!==w || canvas.height!==h){ canvas.width=w; canvas.height=h; } }
+  function resize(){ [els.timeA, els.timeB, els.spec].forEach(c=> c && scaleCanvas(c)); render(); }
+
+  // Events
+  ['input','change'].forEach(ev=>{ [els.wave, els.freq, els.amp, els.sr, els.shaper, els.drive, els.clip, els.cycles, els.dbfloor, els.fftSize, els.winType].forEach(el=> el && el.addEventListener(ev, render)); });
+  window.addEventListener('resize', resize);
+
+  // Boot
+  resize();
+  }
+  function boot(){
+    var blocks = document.querySelectorAll('.kh-waveshaper');
+    blocks.forEach(function(el){ if(!el.dataset.khInit){ el.dataset.khInit='1'; init(el); }});
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+</script>

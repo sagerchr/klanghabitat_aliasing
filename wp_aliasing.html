@@ -1,0 +1,318 @@
+<!-- Aliasing • Elementor embed-ready snippet (self-contained, multi-instance safe) -->
+<style>
+  /* === Scoped theme tokens (apply only inside .kh-aliasing) === */
+  .kh-aliasing{ --bg:#0b0f18; --panel:#121829; --ink:#d9e1ff; --muted:#92a1c6; --accent:#44e0ff; --accent-2:#7ef7cf; --grid:#23304d; --good:#1ee0a1; --warn:#ffb454; --hair:#223055; }
+  .kh-aliasing{ color:var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji"; }
+  .kh-aliasing *{ box-sizing:border-box }
+
+  /* Header */
+  .kh-aliasing .kh-head{ padding:16px clamp(12px, 3vw, 28px); border:1px solid #16203a; border-radius:14px; background: radial-gradient(1200px 240px at 20% -10%, rgba(68,224,255,.12), transparent), radial-gradient(900px 200px at 80% -10%, rgba(126,247,207,.08), transparent); margin-bottom:14px }
+  .kh-aliasing .kh-head h2{ margin:0; font-size:clamp(18px,2.2vw,28px) }
+  .kh-aliasing .kh-head p{ margin:.35rem 0 0; color:var(--muted); font-size:14px }
+
+  /* Layout */
+  .kh-aliasing .kh-grid{ display:grid; gap:20px; grid-template-columns: 1fr 320px; grid-template-areas: "plots controls"; align-items:start; }
+  @media (max-width: 980px){ .kh-aliasing .kh-grid{ grid-template-columns:1fr; grid-template-areas: "controls" "plots" } }
+
+  /* Cards */
+  .kh-aliasing .kh-card{ background: var(--panel); border: 1px solid #1a2340; border-radius: 16px; box-shadow: 0 6px 24px rgba(0,0,0,.35); margin: 0; padding: 6px }
+  .kh-aliasing .kh-card h3{ margin: 6px 8px 10px; font-size: 14px; font-weight: 600; color:#e7edff; letter-spacing:.2px }
+
+  .kh-aliasing .kh-left{ grid-area:plots; display:grid; gap:20px }
+  .kh-aliasing .kh-controls{ grid-area:controls; position: sticky; top: 8px }
+
+  /* Controls */
+  .kh-aliasing label{ font-size: 13px; color: var(--muted); display:block; margin: 8px 0 6px }
+  .kh-aliasing .kh-row{ margin-bottom: 14px }
+  .kh-aliasing select{
+    appearance:none; -webkit-appearance:none; -moz-appearance:none; width:100%;
+    background:#0f1527 url("data:image/svg+xml;utf8,<svg fill='%23cfe0ff' height='14' viewBox='0 0 20 20' width='14' xmlns='http://www.w3.org/2000/svg'><path d='M5.25 7.5l4.75 4.75 4.75-4.75' /></svg>") no-repeat right 12px center; background-size:14px 14px;
+    color:var(--ink); border:1px solid var(--hair); border-radius:10px; padding:10px 38px 10px 12px; font-size:14px; outline:none;
+  }
+  .kh-aliasing select:focus{ border-color: var(--accent); box-shadow: 0 0 0 3px rgba(68,224,255,.18) }
+  .kh-aliasing .kh-range{ display:flex; align-items:center; gap:10px }
+  .kh-aliasing input[type=range]{ width:100% }
+  .kh-aliasing .kh-badge{ font-feature-settings:"tnum" 1; font-variant-numeric:tabular-nums; background:#0f1527; border:1px solid #223055; color:#cfe0ff; padding:6px 10px; border-radius:10px; font-size:12px; min-width:62px; text-align:center }
+  .kh-aliasing .kh-hint{ font-size:11px; color:var(--muted) }
+
+  /* Canvases */
+  .kh-aliasing canvas{ width:100%; height: 220px; display:block; border-radius:10px; background:black }
+</style>
+
+<div class="kh-aliasing">
+  <div class="kh-head">
+    <h2>Aliasing</h2>
+    <p>See how aliasing creates folding when the signal exceeds Nyquist.</p>
+  </div>
+
+  <div class="kh-grid">
+    <div class="kh-left">
+      <div class="kh-card">
+        <h3>Original (continuous) + sampled points</h3>
+        <canvas data-kh-canvas="c1"></canvas>
+      </div>
+      <div class="kh-card">
+        <h3>Reconstructed (ideal sinc) from sampled points</h3>
+        <canvas data-kh-canvas="c2"></canvas>
+      </div>
+      <div class="kh-card">
+        <h3>Magnitude Spectrum</h3>
+        <canvas data-kh-canvas="c3"></canvas>
+      </div>
+    </div>
+
+    <div class="kh-card kh-controls">
+      <h3>Controls</h3>
+
+      <div class="kh-row">
+        <label>Waveform</label>
+        <select data-kh="wave">
+          <option>Sine</option>
+          <option>Square</option>
+          <option>Triangle</option>
+          <option>Sawtooth</option>
+        </select>
+      </div>
+
+      <div class="kh-row">
+        <label>Frequency</label>
+        <div class="kh-range">
+          <input data-kh="freq" type="range" min="0.2" max="1" value="0.5" step="0.001" />
+          <div class="kh-badge" data-kh="freqBadge">—</div>
+        </div>
+        <div class="kh-hint">Folded: <span data-kh="foldedLabel"></span></div>
+      </div>
+
+      <div class="kh-row">
+        <label>Sample rate</label>
+        <select data-kh="fs">
+          <option value="22050">22.05 kHz</option>
+          <option value="32000">32 kHz</option>
+          <option value="44100">44.1 kHz</option>
+          <option value="48000" selected>48 kHz</option>
+          <option value="88200">88.2 kHz</option>
+          <option value="96000">96 kHz</option>
+          <option value="176400">176.4 kHz</option>
+          <option value="192000">192 kHz</option>
+        </select>
+      </div>
+
+      <div class="kh-row kh-hint">Tip: push the tone above Nyquist to watch it mirror. Use Square/Triangle to provoke dense aliasing from higher harmonics.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  function init(root){
+    if(!root) return;
+    // Element lookups (scoped)
+    const qs = (s) => root.querySelector(s);
+    const els = {
+      c1: qs('canvas[data-kh-canvas="c1"]'),
+      c2: qs('canvas[data-kh-canvas="c2"]'),
+      c3: qs('canvas[data-kh-canvas="c3"]'),
+      wave: qs('[data-kh="wave"]'),
+      freq: qs('[data-kh="freq"]'),
+      fs: qs('[data-kh="fs"]'),
+      freqBadge: qs('[data-kh="freqBadge"]'),
+      foldedLabel: qs('[data-kh="foldedLabel"]'),
+    };
+
+    // ======= Config =======
+    const FREQ_MIN = 20;       // slider low end (Hz)
+    const FREQ_MAX = 80000;    // slider high end (Hz)
+    const FMAX_VIEW = 200000;  // spectrum right edge (Hz)
+    const CURVE_COLOR = '#1e3a8a'; // time-domain curve color
+
+    // Central palette for spectrum (scoped to container variables)
+    const COLORS = {
+      background:   getComputedStyle(root).getPropertyValue('--bg') || '#0b1020',
+      grid:         '#334155',
+      labels:       '#cbd5e1',
+      nyquistLine:  '#ef4444',
+      nyquistText:  '#cbd5e1',
+      fundamentalMarker: '#93c5fd',
+      aliasMarker:       '#f59e0b',
+      fftCurve:     '#a78bfa',
+      stemBelow:    '#f59e0b',
+      stemAbove:    '#60a5fa',
+      aliasStem:    '#1e3a8a'
+    };
+
+    // ======= Helpers =======
+    function triangleWave(t) { const frac = t - Math.floor(t); return 2 * Math.abs(2 * frac - 1) - 1; }
+    function sawWave(t){ const frac = t - Math.floor(t); return 2*frac - 1; }
+    function fmtHz(v) { return v < 1000 ? `${Math.round(v)} Hz` : `${(v / 1000).toFixed(v < 10000 ? 3 : 2)} kHz`; }
+    function genWave(t, f0, amp, wave) {
+      const out = new Float64Array(t.length);
+      for (let i = 0; i < t.length; i++) {
+        const phase = f0 * t[i];
+        let v = 0;
+        if (wave === 'Sine') v = Math.sin(2 * Math.PI * phase);
+        else if (wave === 'Square') v = Math.sign(Math.sin(2 * Math.PI * phase));
+        else if (wave === 'Triangle') v = triangleWave(phase);
+        else v = sawWave(phase);
+        out[i] = amp * v;
+      }
+      return out;
+    }
+    function aliasFundamental(f, fs) { return Math.abs(f - fs * Math.round(f / fs)); }
+
+    function prepCanvas(canvas) {
+      const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+      const cssW = canvas.clientWidth || canvas.width; const cssH = canvas.clientHeight || canvas.height;
+      if (canvas.width !== Math.floor(cssW * dpr) || canvas.height !== Math.floor(cssH * dpr)) { canvas.width = Math.floor(cssW * dpr); canvas.height = Math.floor(cssH * dpr); }
+      const ctx = canvas.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { ctx, W: cssW, H: cssH };
+    }
+
+    function drawTime(canvas, t, x, points, opts = {}) {
+      const { ctx, W, H } = prepCanvas(canvas);
+      const { autoscale = false, headroom = 1.1 } = opts;
+
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = COLORS.background; ctx.fillRect(0, 0, W, H);
+
+      let peak = 1.0;
+      if (autoscale) {
+        peak = 1e-9;
+        for (let i = 0; i < x.length; i++) { const a = Math.abs(x[i]); if (a > peak) peak = a; }
+        peak *= headroom;
+      }
+      const yScale = (H * 0.45) / peak;
+
+      // midline
+      ctx.strokeStyle = COLORS.grid; ctx.globalAlpha = 0.7; ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke(); ctx.globalAlpha = 1;
+
+      // curve
+      ctx.strokeStyle = CURVE_COLOR; ctx.lineWidth = 2; ctx.beginPath();
+      const xmin = t[0], xmax = t[t.length - 1];
+      for (let i = 0; i < t.length; i++) {
+        const xPix = ((t[i] - xmin) / (xmax - xmin)) * (W - 1);
+        const yPix = H / 2 - x[i] * yScale;
+        if (i === 0) ctx.moveTo(xPix, yPix); else ctx.lineTo(xPix, yPix);
+      }
+      ctx.stroke();
+
+      // points (sample dots)
+      if (points) {
+        ctx.fillStyle = '#fbbf24';
+        const tS = points.tS, xS = points.xS;
+        for (let i = 0; i < tS.length; i++) {
+          const tt = tS[i]; if (tt < xmin || tt > xmax) continue;
+          const xPix = ((tt - xmin) / (xmax - xmin)) * (W - 1);
+          const yPix = H / 2 - xS[i] * yScale;
+          ctx.beginPath(); ctx.arc(xPix, yPix, 3, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+
+    function genHarmonics(wave, f0, amp, fmax){
+      const stems = []; if (f0 <= 0) return stems;
+      if (wave === 'Sine') { if (f0 <= fmax) stems.push({ f: f0, a: amp }); return stems; }
+      if (wave === 'Square') { const norm = 4 / Math.PI; for (let n=1;;n+=2){ const f=n*f0; if (f>fmax) break; stems.push({ f, a: amp * (norm*(1/n)) }); } return stems; }
+      if (wave === 'Triangle') { const norm = 8 / (Math.PI*Math.PI); for (let n=1;;n+=2){ const f=n*f0; if (f>fmax) break; stems.push({ f, a: amp * (norm*(1/(n*n))) }); } return stems; }
+      const norm = 2 / Math.PI; for (let n=1;;n++){ const f=n*f0; if (f>fmax) break; stems.push({ f, a: amp * (norm*(1/n)) }); }
+      return stems;
+    }
+
+    function drawSpectrum(canvas, fs, f0, wave, amp, opts = {}) {
+      const { dbFloor = -60, fmin = 10, fmax = FMAX_VIEW } = opts;
+      const { ctx, W, H } = prepCanvas(canvas);
+
+      const a = Math.log10(fmin), b = Math.log10(fmax);
+      const logX = (f) => { const t = (Math.log10(Math.max(f, fmin)) - a) / (b - a); return Math.min(W - 1, Math.max(0, t * (W - 1))); };
+      const dbToY = (dB) => { const clamped = Math.max(dbFloor, Math.min(0, dB)); return H - ((clamped - dbFloor) / (0 - dbFloor)) * H; };
+
+      ctx.clearRect(0, 0, W, H); ctx.fillStyle = COLORS.background; ctx.fillRect(0,0,W,H);
+
+      // grids
+      const dbTicks   = [-140,-120,-100,-80,-60,-40,-20,0];
+      const freqTicks = [10,20,30,40,50,60,70,80,90, 100,200,300,400,500,600,800,900, 1000,2000,3000,4000,5000,6000,7000,8000,9000, 10000,20000,30000,40000,50000,60000,70000,80000,90000, 100000,200000];
+      const majorFreqTicks = [100, 1000, 10000, 100000];
+      const majorSet = new Set(majorFreqTicks);
+
+      ctx.strokeStyle = '#334155'; ctx.lineWidth = 1; ctx.globalAlpha = 0.6; ctx.beginPath();
+      for (const d of dbTicks) { const y = dbToY(d); ctx.moveTo(0, y); ctx.lineTo(W, y); }
+      ctx.stroke(); ctx.globalAlpha = 1;
+
+      ctx.save(); ctx.strokeStyle = '#334155'; ctx.globalAlpha = 0.35; ctx.lineWidth = 1; ctx.beginPath();
+      for (const f of freqTicks) { if (f < fmin || f > fmax || majorSet.has(f)) continue; const x = logX(f); ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+      ctx.stroke(); ctx.restore();
+
+      ctx.save(); ctx.strokeStyle = '#334155'; ctx.globalAlpha = 0.8; ctx.lineWidth = 1.5; ctx.beginPath();
+      for (const f of majorFreqTicks) { if (f < fmin || f > fmax) continue; const x = logX(f); ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+      ctx.stroke(); ctx.restore();
+
+      // Nyquist
+      const nyq = fs / 2; const nx = logX(nyq);
+      ctx.setLineDash([6, 6]); ctx.strokeStyle = '#ef4444'; ctx.beginPath(); ctx.moveTo(nx, 0); ctx.lineTo(nx, H); ctx.stroke(); ctx.setLineDash([]);
+
+      // f0 & alias markers
+      const aliasF0 = aliasFundamental(f0, fs);
+      const x0 = logX(Math.min(Math.max(f0, fmin), fmax));
+      const xa = logX(Math.min(Math.max(aliasF0, fmin), fmax));
+      ctx.setLineDash([2, 4]); ctx.strokeStyle = '#93c5fd'; ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, H); ctx.stroke();
+      ctx.setLineDash([4, 4]); ctx.strokeStyle = '#f59e0b'; ctx.beginPath(); ctx.moveTo(xa, 0); ctx.lineTo(xa, H); ctx.stroke(); ctx.setLineDash([]);
+
+      // Ideal harmonic stems + aliases
+      const stems = genHarmonics(wave, f0, amp, fmax); ctx.lineWidth = 1.5;
+      for (const { f, a: ampl } of stems) { if (f < fmin || f > fmax) continue; const x = logX(f); const y = dbToY(20 * Math.log10(Math.max(ampl, 1e-12))); ctx.strokeStyle = (f <= nyq) ? '#f59e0b' : '#60a5fa'; ctx.beginPath(); ctx.moveTo(x, H - 1); ctx.lineTo(x, y); ctx.stroke(); }
+      for (const { f, a: ampl } of stems) { if (f <= nyq) continue; const fa = Math.abs(f - fs * Math.round(f / fs)); if (fa < fmin || fa > fmax) continue; const xA = logX(fa); const yA = dbToY(20 * Math.log10(Math.max(ampl, 1e-12))); ctx.strokeStyle = '#1e3a8a'; ctx.beginPath(); ctx.moveTo(xA, H - 1); ctx.lineTo(xA, yA); ctx.stroke(); }
+
+      // Labels
+      ctx.fillStyle = '#cbd5e1'; ctx.font = '12px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      for (const f of majorFreqTicks) { if (f < fmin || f > fmax) continue; const x = logX(f); const label = (f >= 1000) ? `${(f / 1000).toFixed(0)} kHz` : `${f} Hz`; ctx.fillText(label, x, H - 14); }
+      ctx.textAlign = 'right'; ctx.textBaseline = 'top'; ctx.fillText(`${(nyq / 1000).toFixed(1)} kHz (Nyquist)`, W - 6, 6);
+    }
+
+    // === UI niceties ===
+    function updateSliderFill(el){ const min = +el.min || 0, max = +el.max || 1, val = +el.value || 0; el.style.setProperty('--pct', ((val - min) / (max - min) * 100) + '%'); }
+
+    // ======= Render loop =======
+    function render() {
+      // 0..1 slider → log Hz
+      const sliderVal = parseFloat(els.freq.value);
+      const f0 = FREQ_MIN * Math.pow(FREQ_MAX / FREQ_MIN, sliderVal);
+
+      const fs = +els.fs.value; const wave = els.wave.value; const nyq = fs / 2; const amp = 1.0;
+
+      // Labels
+      els.freqBadge.textContent = fmtHz(f0);
+      els.foldedLabel.textContent = fmtHz(aliasFundamental(f0, fs));
+
+      // Time window (~3 cycles)
+      const cycles = 3; const viewWindow = Math.max(1e-6, cycles / Math.max(f0, 1e-9));
+      const viewCount = 1600; const tView = new Float64Array(viewCount); for (let i = 0; i < viewCount; i++) tView[i] = i * (viewWindow / (viewCount - 1));
+      const xCont = genWave(tView, f0, amp, wave);
+
+      // Sampled signal (cover view + ±5T for sinc)
+      const T = 1 / fs; const left = -5 * T, right = viewWindow + 5 * T; const nSamp = Math.max(64, Math.ceil((right - left) * fs));
+      const tSamp = new Float64Array(nSamp); for (let n = 0; n < nSamp; n++) tSamp[n] = left + n / fs;
+      const xSamp = genWave(tSamp, f0, amp, wave);
+
+      // Ideal sinc reconstruction
+      const xRecon = (function sincRecon(samples, tS, tR) { const T = tS[1] - tS[0]; const y = new Float64Array(tR.length); for (let i = 0; i < tS.length; i++) { const si = samples[i]; for (let j = 0; j < tR.length; j++) { const u = (tR[j] - tS[i]) / T; y[j] += si * (u === 0 ? 1 : Math.sin(Math.PI * u) / (Math.PI * u)); } } return y; })(xSamp, tSamp, tView);
+
+      // Draw
+      drawTime(els.c1, tView, xCont, { tS: tSamp, xS: xSamp });
+      drawTime(els.c2, tView, xRecon, { tS: tSamp, xS: xSamp }, { autoscale: true });
+      drawSpectrum(els.c3, fs, f0, wave, amp);
+
+      // Slider fill
+      updateSliderFill(els.freq);
+    }
+
+    // Events
+    ['input', 'change'].forEach(evt => { [els.wave, els.freq, els.fs].forEach(el => el && el.addEventListener(evt, render)); });
+    window.addEventListener('resize', render);
+
+    // Init
+    updateSliderFill(els.freq); render();
+  }
+
+  function boot(){ document.querySelectorAll('.kh-aliasing').forEach(function(el){ if(!el.dataset.khInit){ el.dataset.khInit='1'; init(el); } }); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
