@@ -1,4 +1,4 @@
-<!-- Waveshaper • Elementor embed-ready snippet (slimmed controls) -->
+<!-- Waveshaper • Elementor embed-ready snippet (slimmed controls + asym tanh) -->
 <style>
   /* === Scoped theme tokens (apply only inside .kh-waveshaper) === */
   .kh-waveshaper{ --bg:#0b0f18; --panel:#121829; --ink:#d9e1ff; --muted:#92a1c6; --accent:#44e0ff; --accent-2:#7ef7cf; --grid:#23304d; --good:#1ee0a1; --warn:#ffb454; --hair:#223055; }
@@ -91,7 +91,7 @@
         <label>Frequency</label>
         <div class="kh-range">
           <input data-kh="freq" type="range" min="110" max="10000" step="1" value="1000" />
-          <div class="kh-badge"><span data-kh="freqVal">220</span> Hz</div>
+          <div class="kh-badge"><span data-kh="freqVal">1000</span> Hz</div>
         </div>
       </div>
 
@@ -99,7 +99,7 @@
         <label>Amplitude</label>
         <div class="kh-range">
           <input data-kh="amp" type="range" min="0.05" max="1.0" step="0.01" value="0.9" />
-          <div class="kh-badge"><span data-kh="ampVal">1.0</span></div>
+          <div class="kh-badge"><span data-kh="ampVal">0.90</span></div>
         </div>
       </div>
 
@@ -115,6 +115,7 @@
         <label>Waveshaper</label>
         <select data-kh="shaper">
           <option value="tanh" selected>tanh (soft saturation)</option>
+          <option value="tanh_asym">tanh (asym, even harmonics)</option>
           <option value="atan">atan (soft saturation)</option>
           <option value="cubic">cubic (soft clip)</option>
           <option value="hard">hard clip</option>
@@ -127,10 +128,17 @@
         <label>Drive</label>
         <div class="kh-range">
           <input data-kh="drive" type="range" min="0.1" max="10" step="0.1" value="0.1" />
-          <div class="kh-badge"><span data-kh="driveVal">3.0</span>×</div>
+          <div class="kh-badge"><span data-kh="driveVal">0.1</span>×</div>
         </div>
       </div>
 
+      <div class="kh-row" data-kh="skewCtl" style="display:none">
+        <label>Asymmetry</label>
+        <div class="kh-range">
+          <input data-kh="skew" type="range" min="0" max="0.9" step="0.01" value="0.20" />
+          <div class="kh-badge"><span data-kh="skewVal">0.20</span></div>
+        </div>
+      </div>
       <div class="kh-row" data-kh="clipCtl" style="display:none">
         <label>Clip threshold</label>
         <div class="kh-range">
@@ -143,7 +151,7 @@
         <label>Spectrum floor</label>
         <div class="kh-range">
           <input data-kh="dbfloor" type="range" min="-100" max="-20" step="1" value="-40" />
-          <div class="kh-badge"><span data-kh="dbfloorVal">-110</span> dB</div>
+          <div class="kh-badge"><span data-kh="dbfloorVal">-40</span> dB</div>
         </div>
       </div>
 
@@ -178,6 +186,8 @@
       drive: qs('[data-kh="drive"]'), driveVal: qs('[data-kh="driveVal"]'),
       clipCtl: qs('[data-kh="clipCtl"]'),
       clip: qs('[data-kh="clip"]'), clipVal: qs('[data-kh="clipVal"]'),
+      skewCtl: qs('[data-kh="skewCtl"]'),
+      skew: qs('[data-kh="skew"]'), skewVal: qs('[data-kh="skewVal"]'),
       dbfloor: qs('[data-kh="dbfloor"]'), dbfloorVal: qs('[data-kh="dbfloorVal"]'),
       timeA: qs('canvas[data-kh-canvas="timeA"]'),
       timeB: qs('canvas[data-kh-canvas="timeB"]'),
@@ -286,10 +296,19 @@
       }
       return out;
     }
-    function shapeSample(x,type,drive,clipTh){
+
+    // NEW: asymmetrical soft-saturation (positive gets a bit more drive)
+    function shapeSample(x,type,drive,clipTh,skew){
       const d=drive;
       switch(type){
         case 'tanh': return Math.tanh(d*x)/Math.tanh(Math.max(1e-6,d));
+        case 'tanh_asym': {
+          const s = clamp(isFinite(skew)?skew:0, 0, 0.9); // 0..0.9 bias
+          const dp = d*(1+s), dn = d*(1-s);
+          const pos = Math.tanh(dp*x)/Math.tanh(Math.max(1e-6,dp));
+          const neg = Math.tanh(dn*x)/Math.tanh(Math.max(1e-6,dn));
+          return x >= 0 ? pos : neg;
+        }
         case 'atan': return Math.atan(d*x)/Math.atan(Math.max(1e-6,d));
         case 'cubic':{ const y=x*d; const soft=y-(y*y*y)/3; return clamp(soft,-1,1);}
         case 'hard':{ const y=x*d; const th=Math.max(0.0001,clipTh); return clamp(y,-th,th)/th;}
@@ -297,9 +316,9 @@
         case 'none': default: return x;
       }
     }
-    function applyShaper(buf,type,drive,clipTh){
+    function applyShaper(buf,type,drive,clipTh,skew){
       const out=new Float64Array(buf.length);
-      for(let i=0;i<buf.length;i++) out[i]=shapeSample(buf[i],type,drive,clipTh);
+      for(let i=0;i<buf.length;i++) out[i]=shapeSample(buf[i],type,drive,clipTh,skew);
       return out;
     }
 
@@ -349,10 +368,10 @@
       for(let k=0;k<n2;k++) magsDB[k]=clamp(dB(mags[k]/maxMag), -300, 0);
       return magsDB;
     }
-    function computeIdealOverlay(sampleRate, fftLen, type, f, A, sh, drv, th, winType){
+    function computeIdealOverlay(sampleRate, fftLen, type, f, A, sh, drv, th, winType, skew){
       const targetFmax=200000; const neededOSR=Math.ceil((targetFmax*2)/sampleRate); const OSR=Math.max(2, Math.min(16, neededOSR));
       const hiSR=sampleRate*OSR; const MAX_HI_LEN=262144; const hiLen=Math.min(MAX_HI_LEN, Math.max(2048, fftLen*OSR));
-      const inHi=genWave(type, f, A, hiSR, hiLen); const shapedHi=applyShaper(inHi, sh, drv, th); const magsDBHi=spectrumDB(shapedHi, hiSR, winType);
+      const inHi=genWave(type, f, A, hiSR, hiLen); const shapedHi=applyShaper(inHi, sh, drv, th, skew); const magsDBHi=spectrumDB(shapedHi, hiSR, winType);
       return { magsDB:magsDBHi, sampleRate: hiSR };
     }
 
@@ -363,6 +382,7 @@
       els.srVal.textContent   = (parseInt(els.sr.value,10)/1000).toFixed(1);
       els.driveVal.textContent= parseFloat(els.drive.value).toFixed(1);
       els.clipVal.textContent = parseFloat(els.clip.value).toFixed(2);
+      if (els.skewVal) els.skewVal.textContent = parseFloat(els.skew.value).toFixed(2);
       els.dbfloorVal.textContent = parseInt(els.dbfloor.value,10);
     }
 
@@ -381,8 +401,9 @@
       const inputFFT  = genWave(type, f, A, sampleRate, fftLen);
 
       const sh = els.shaper.value; const drv = parseFloat(els.drive.value); const th = parseFloat(els.clip.value);
-      const shapedTime = applyShaper(inputTime, sh, drv, th);
-      const shapedFFT  = applyShaper(inputFFT,  sh, drv, th);
+      const skew = els.skew ? parseFloat(els.skew.value) : 0;
+      const shapedTime = applyShaper(inputTime, sh, drv, th, skew);
+      const shapedFFT  = applyShaper(inputFFT,  sh, drv, th, skew);
 
       const scale = (arr)=>{ let m=0; for(let i=0;i<arr.length;i++) m=Math.max(m, Math.abs(arr[i])); const s=m>1?1/m:1; const out=new Float64Array(arr.length); for(let i=0;i<arr.length;i++) out[i]=arr[i]*s; return out; };
       const accent  = css.getPropertyValue('--accent');
@@ -392,10 +413,11 @@
       drawSignal(els.timeB, scale(shapedTime), accent2);
 
       const magsDB = spectrumDB(shapedFFT, sampleRate, winType);
-      const ideal  = computeIdealOverlay(sampleRate, fftLen, type, f, A, sh, drv, th, winType);
+      const ideal  = computeIdealOverlay(sampleRate, fftLen, type, f, A, sh, drv, th, winType, skew);
       drawSpectrum(els.spec, magsDB, sampleRate, ideal);
 
       els.clipCtl.style.display = (sh === 'hard') ? '' : 'none';
+      if (els.skewCtl) els.skewCtl.style.display = (sh === 'tanh_asym') ? '' : 'none';
     }
 
     function scaleCanvas(canvas){
@@ -408,7 +430,7 @@
 
     // Events (removed cycles/fftSize/winType)
     ['input','change'].forEach(ev=>{
-      [els.wave, els.freq, els.amp, els.sr, els.shaper, els.drive, els.clip, els.dbfloor]
+      [els.wave, els.freq, els.amp, els.sr, els.shaper, els.drive, els.clip, els.dbfloor, els.skew]
         .forEach(el=> el && el.addEventListener(ev, render));
     });
     window.addEventListener('resize', resize);
