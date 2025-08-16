@@ -6,7 +6,7 @@
   .kh-waveshaper *{ box-sizing:border-box }
 
   /* Header */
-  .kh-waveshaper .kh-head{ padding:16px clamp(12px, 3vw, 28px); border:1px solid #16203a; border-radius:14px; background: radial-gradient(1200px 240px at 20% -10%, rgba(68,224,255,.12), transparent), radial-gradient(900px 200px at 80% -10%, rgba(126,247,207,.08), transparent); margin-bottom:14px }
+  .kh-waveshaper .kh-head{ padding:16px clamp(12px, 3vw, 28px); border:1px solid #16203a; border-radius:14px; background: var(--panel); margin-bottom:14px }
   .kh-waveshaper .kh-head h2{ margin:0; font-size:clamp(18px,2.2vw,28px) }
   .kh-waveshaper .kh-head p{ margin:.35rem 0 0; color:var(--muted); font-size:14px }
 
@@ -125,7 +125,7 @@
       <div class="kh-row">
         <label>Drive</label>
         <div class="kh-range">
-          <input data-kh="drive" type="range" min="0" max="10" step="0.1" value="3" />
+          <input data-kh="drive" type="range" min="0.1" max="10" step="0.1" value="0.1" />
           <div class="kh-badge"><span data-kh="driveVal">3.0</span>×</div>
         </div>
       </div>
@@ -159,9 +159,9 @@
         <select data-kh="fftSize">
           <option value="2048">2048</option>
           <option value="4096">4096</option>
-          <option value="8192" selected>8192</option>
+          <option value="8192" >8192</option>
           <option value="16384">16384</option>
-          <option value="32768">32768</option>
+          <option value="32768"selected>32768</option>
         </select>
       </div>
 
