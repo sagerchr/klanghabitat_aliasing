@@ -1,4 +1,4 @@
-<!-- Waveshaper • Elementor embed-ready snippet (slimmed controls + asym tanh) -->
+<!-- Waveshaper • Elementor embed-ready snippet (fixed amp=1, sr=48k) -->
 <style>
   /* === Scoped theme tokens (apply only inside .kh-waveshaper) === */
   .kh-waveshaper{ --bg:#0b0f18; --panel:#121829; --ink:#d9e1ff; --muted:#92a1c6; --accent:#44e0ff; --accent-2:#7ef7cf; --grid:#23304d; --good:#1ee0a1; --warn:#ffb454; --hair:#223055; }
@@ -49,7 +49,7 @@
 <div class="kh-waveshaper">
   <div class="kh-head">
     <h2>Waveshaper</h2>
-    <p>Create a waveform, pass it through a waveshaper (e.g. <em>tanh</em>), and inspect the resulting waveform & spectrum.</p>
+    <p>Amplitude fixed at 1.0, sample rate fixed at 48 kHz.</p>
   </div>
 
   <div class="kh-grid">
@@ -81,9 +81,9 @@
         <label>Waveform</label>
         <select data-kh="wave">
           <option value="sine">Sine</option>
-          <option value="square">Square</option>
           <option value="saw">Saw</option>
           <option value="triangle">Triangle</option>
+          <option value="square">Square</option>
         </select>
       </div>
 
@@ -92,22 +92,6 @@
         <div class="kh-range">
           <input data-kh="freq" type="range" min="110" max="10000" step="1" value="1000" />
           <div class="kh-badge"><span data-kh="freqVal">1000</span> Hz</div>
-        </div>
-      </div>
-
-      <div class="kh-row">
-        <label>Amplitude</label>
-        <div class="kh-range">
-          <input data-kh="amp" type="range" min="0.05" max="1.0" step="0.01" value="0.9" />
-          <div class="kh-badge"><span data-kh="ampVal">0.90</span></div>
-        </div>
-      </div>
-
-      <div class="kh-row">
-        <label>Sample rate</label>
-        <div class="kh-range">
-          <input data-kh="sr" type="range" min="8000" max="96000" step="1000" value="48000" />
-          <div class="kh-badge"><span data-kh="srVal">48.0</span> kHz</div>
         </div>
       </div>
 
@@ -139,6 +123,7 @@
           <div class="kh-badge"><span data-kh="skewVal">0.20</span></div>
         </div>
       </div>
+
       <div class="kh-row" data-kh="clipCtl" style="display:none">
         <label>Clip threshold</label>
         <div class="kh-range">
@@ -155,8 +140,8 @@
         </div>
       </div>
 
-      <!-- Removed: Cycles shown, FFT size, Window -->
-      <div class="kh-row kh-hint">Spectrum domain is fixed to 10 Hz → 200 kHz. Red dashed line marks Nyquist. Orange overlay shows ideal > Nyquist extension.</div>
+      <!-- Removed: Amplitude, Sample rate, Cycles shown, FFT size, Window -->
+      <div class="kh-row kh-hint">Spectrum domain is fixed to 10 Hz → 200 kHz. Red dashed line marks Nyquist (24 kHz @ 48 kHz SR). Orange overlay shows ideal > Nyquist extension.</div>
     </div>
   </div>
 </div>
@@ -171,17 +156,17 @@
     const dB = (x)=> 20*Math.log10(x);
     const css = getComputedStyle(root);
 
-    // Hard-coded defaults for removed controls
-    const CYCLES_DEFAULT = 4;         // previously "Cycles shown"
-    const FFTLEN_DEFAULT = 32768;     // previously "FFT size" (selected)
-    const WINTYPE_DEFAULT = 'hann';   // previously "Window"
+    // Fixed params (removed controls)
+    const A_FIXED = 1.0;          // amplitude
+    const SR_FIXED = 48000;       // sample rate (Hz)
+    const CYCLES_DEFAULT = 4;     // previously "Cycles shown"
+    const FFTLEN_DEFAULT = 32768; // previously "FFT size" (selected)
+    const WINTYPE_DEFAULT = 'hann';
 
     // UI elements
     const els = {
       wave: qs('[data-kh="wave"]'),
       freq: qs('[data-kh="freq"]'), freqVal: qs('[data-kh="freqVal"]'),
-      amp: qs('[data-kh="amp"]'), ampVal: qs('[data-kh="ampVal"]'),
-      sr: qs('[data-kh="sr"]'), srVal: qs('[data-kh="srVal"]'),
       shaper: qs('[data-kh="shaper"]'),
       drive: qs('[data-kh="drive"]'), driveVal: qs('[data-kh="driveVal"]'),
       clipCtl: qs('[data-kh="clipCtl"]'),
@@ -260,7 +245,12 @@
         const fR=Math.pow(10, logLo + ((x - padL + .5)/plotW)*(logHi-logLo));
         const spanMin=Math.max(fmin, Math.min(fL,fR)); const spanMax=Math.min(fmax, Math.max(fL,fR));
         let peakDB=floor; // default beyond Nyquist
-        if(spanMin<=nyq){ const lo=spanMin; const hi=Math.min(spanMax, nyq); let kL=Math.floor((lo/nyq)*(N2-1)); let kR=Math.ceil((hi/nyq)*(N2-1)); if(kR<kL){const t=kL;kL=kR;kR=t;} kL=Math.max(0,Math.min(N2-1,kL)); kR=Math.max(0,Math.min(N2-1,kR)); if(kR>=kL){ peakDB=-300; for(let kk=kL; kk<=kR; kk++){ if(magsDB[kk]>peakDB) peakDB=magsDB[kk]; } } }
+        if(spanMin<=nyq){
+          const lo=spanMin; const hi=Math.min(spanMax, nyq);
+          let kL=Math.floor((lo/nyq)*(N2-1)); let kR=Math.ceil((hi/nyq)*(N2-1));
+          if(kR<kL){const t=kL;kL=kR;kR=t;} kL=Math.max(0,Math.min(N2-1,kL)); kR=Math.max(0,Math.min(N2-1,kR));
+          if(kR>=kL){ peakDB=-300; for(let kk=kL; kk<=kR; kk++){ if(magsDB[kk]>peakDB) peakDB=magsDB[kk]; } }
+        }
         const yy = Math.min(H-padB, Math.max(padT, dbToY(peakDB)));
         if(first){ ctx.moveTo(x,yy); first=false; } else { ctx.lineTo(x,yy); }
       }
@@ -273,8 +263,10 @@
         for(let x=padL; x<=W-padR; x++){
           const fL=Math.pow(10, logLo + ((x - padL - .5)/plotW)*(logHi-logLo));
           const fR=Math.pow(10, logLo + ((x - padL + .5)/plotW)*(logHi-logLo));
-          const lo=Math.max(nyq, Math.min(fL,fR)); const hi=Math.min(hiNyq, Math.max(fL,fR)); if(hi<=lo){ started=false; continue; }
-          let kL=Math.floor((lo/hiNyq)*(N2h-1)); let kR=Math.ceil((hi/hiNyq)*(N2h-1)); if(kR<kL){const t=kL;kL=kR;kR=t;} kL=Math.max(0,Math.min(N2h-1,kL)); kR=Math.max(0,Math.min(N2h-1,kR));
+          const lo=Math.max(nyq, Math.min(fL,fR)); const hi=Math.min(hiNyq, Math.max(fL,fR));
+          if(hi<=lo){ started=false; continue; }
+          let kL=Math.floor((lo/hiNyq)*(N2h-1)); let kR=Math.ceil((hi/hiNyq)*(N2h-1));
+          if(kR<kL){const t=kL;kL=kR;kR=t;} kL=Math.max(0,Math.min(N2h-1,kL)); kR=Math.max(0,Math.min(N2h-1,kR));
           let peak=-300; for(let kk=kL; kk<=kR; kk++){ if(magsHi[kk]>peak) peak=magsHi[kk]; }
           const yy=Math.min(H-padB, Math.max(padT, dbToY(peak)));
           if(!started){ ctx.moveTo(x,yy); started=true; } else { ctx.lineTo(x,yy); }
@@ -289,15 +281,40 @@
 
     // ===== Signal & shaping =====
     function genWave(type, freq, amp, sampleRate, length){
-      const out = new Float64Array(length); const w = 2*Math.PI*freq/sampleRate;
-      for(let n=0;n<length;n++){ const t=n/sampleRate; let v=0;
-        switch(type){ case 'sine': v=Math.sin(w*n); break; case 'square': v=Math.sign(Math.sin(w*n)); break; case 'saw': v=2*((freq*t)%1)-1; break; case 'triangle': v=2/Math.PI*Math.asin(Math.sin(w*n)); break; default: v=Math.sin(w*n);}
-        out[n]=amp*v;
+      const out = new Float64Array(length);
+      const w = 2*Math.PI*freq/sampleRate;
+
+      for (let n = 0; n < length; n++) {
+        const t = n / sampleRate;
+        let v = 0;
+
+        switch (type) {
+          case 'sine':
+            v = Math.sin(w*n);
+            break;
+
+          case 'square': {
+              v = Math.sign(Math.sin(w*n));
+              break;
+          }
+
+          case 'saw':
+            v = 2 * ((freq * t) % 1) - 1;
+            break;
+
+          case 'triangle':
+            v = (2/Math.PI) * Math.asin(Math.sin(w*n));
+            break;
+
+          default:
+            v = Math.sin(w*n);
+        }
+
+        out[n] = amp * v;
       }
       return out;
     }
 
-    // NEW: asymmetrical soft-saturation (positive gets a bit more drive)
     function shapeSample(x,type,drive,clipTh,skew){
       const d=drive;
       switch(type){
@@ -337,21 +354,37 @@
       }
     }
     function fft(real, imag){
-      const n=real.length;
-      for(let i=1,j=0;i<n;i++){ let bit=n>>1; for(; j & bit; bit>>=1) j^=bit; j^=bit; if(i<j){ let tr=real[i]; real[i]=real[j]; real[j]=tr; let ti=imag[i]; imag[i]=imag[j]; imag[j]=ti; } }
-      for(let len=2; len<=n; len<<=1){
-        const ang=-2*Math.PI/len; const wlenCos=Math.cos(ang), wlenSin=Math.sin(ang);
-        for(let i=0;i<n;i+=len){
-          let wcos=1, wsin=0;
-          for(let j=0;j<(len>>1); j++){
-            const uRe=real[i+j], uIm=imag[i+j];
-            const vRe=real[i+j+(len>>1)]*wcos - imag[i+j+(len>>1)]*wsin;
-            const vIm=real[i+j+(len>>1)]*wsin + imag[i+j+(len>>1)]*wcos;
-            real[i+j]=uRe+vRe; imag[i+j]=uIm+vIm;
-            real[i+j+(len>>1)]=uRe-vRe; imag[i+j+(len>>1)]=uIm-vIm;
-            const nwcos=wcos*wlenCos - wsin*wlenSin;
-            const nwsin=wcos*wlenSin + wsin*wlenCos;
-            wcos=nwcos; wsin=nwsin;
+      const n = real.length;
+
+      for (let i = 1, j = 0; i < n; i++) {
+        let bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) {
+          let tr = real[i]; real[i] = real[j]; real[j] = tr;
+          let ti = imag[i]; imag[i] = imag[j]; imag[j] = ti;
+        }
+      }
+
+      for (let len = 2; len <= n; len <<= 1) {
+        const ang = -2 * Math.PI / len;
+        const wlenCos = Math.cos(ang), wlenSin = Math.sin(ang);
+
+        for (let i = 0; i < n; i += len) {
+          let wcos = 1, wsin = 0;
+          for (let j = 0; j < (len >> 1); j++) {
+            const uRe = real[i + j], uIm = imag[i + j];
+            const vRe = real[i + j + (len >> 1)] * wcos - imag[i + j + (len >> 1)] * wsin;
+            const vIm = real[i + j + (len >> 1)] * wsin + imag[i + j + (len >> 1)] * wcos;
+
+            real[i + j]                 = uRe + vRe;
+            imag[i + j]                 = uIm + vIm;
+            real[i + j + (len >> 1)]    = uRe - vRe;
+            imag[i + j + (len >> 1)]    = uIm - vIm;
+
+            const nwcos = wcos * wlenCos - wsin * wlenSin;
+            const nwsin = wcos * wlenSin + wsin * wlenCos;
+            wcos = nwcos; wsin = nwsin;
           }
         }
       }
@@ -378,8 +411,6 @@
     // ===== Controller =====
     function updateLabels(){
       els.freqVal.textContent = parseInt(els.freq.value,10);
-      els.ampVal.textContent  = parseFloat(els.amp.value).toFixed(2);
-      els.srVal.textContent   = (parseInt(els.sr.value,10)/1000).toFixed(1);
       els.driveVal.textContent= parseFloat(els.drive.value).toFixed(1);
       els.clipVal.textContent = parseFloat(els.clip.value).toFixed(2);
       if (els.skewVal) els.skewVal.textContent = parseFloat(els.skew.value).toFixed(2);
@@ -388,12 +419,12 @@
 
     function render(){
       updateLabels();
-      const sampleRate = parseInt(els.sr.value,10);
+      const sampleRate = SR_FIXED;
       const f = parseFloat(els.freq.value);
-      const A = parseFloat(els.amp.value);
+      const A = A_FIXED;
       const type = els.wave.value;
 
-      const timeLen = clamp(Math.max(256, Math.round(CYCLES_DEFAULT * sampleRate / Math.max(f,1))), 256, 24000);
+      const timeLen = Math.min(24000, Math.max(256, Math.round(CYCLES_DEFAULT * sampleRate / Math.max(f,1))));
       const fftLen = FFTLEN_DEFAULT;
       const winType = WINTYPE_DEFAULT;
 
@@ -428,9 +459,9 @@
     }
     function resize(){ [els.timeA, els.timeB, els.spec].forEach(c=> c && scaleCanvas(c)); render(); }
 
-    // Events (removed cycles/fftSize/winType)
+    // Events (no amp/sr listeners anymore)
     ['input','change'].forEach(ev=>{
-      [els.wave, els.freq, els.amp, els.sr, els.shaper, els.drive, els.clip, els.dbfloor, els.skew]
+      [els.wave, els.freq, els.shaper, els.drive, els.clip, els.dbfloor, els.skew]
         .forEach(el=> el && el.addEventListener(ev, render));
     });
     window.addEventListener('resize', resize);
